@@ -18,19 +18,19 @@ library
                       Lustre.Compiler.IR.Lustre
                       Lustre.Compiler.IR.NLustre
                       Lustre.Compiler.IR.Stc
-                      -- Lustre.Compiler.IR.Obc
+                      Lustre.Compiler.IR.Obc
     other-modules:    Lustre.Utils
                       Lustre.Compiler.Options
                       Lustre.Compiler.Monad
                       Lustre.Compiler.IR.Base
                       Lustre.Compiler.IR.NLustre.Syntax
                       Lustre.Compiler.IR.Stc.Syntax
-                      -- Lustre.Compiler.IR.Obc.Syntax
+                      Lustre.Compiler.IR.Obc.Syntax
                       Lustre.Compiler.Passes.Normalize
                       Lustre.Compiler.Passes.ToStc
-                     -- Lustre.Compiler.Passes.ToObc
-                     Lustre.Compiler.Passes.Schedule
-                     -- Lustre.Compiler.Passes.Codegen
+                      Lustre.Compiler.Passes.ToObc
+                      Lustre.Compiler.Passes.Schedule
+                      Lustre.Compiler.Passes.Codegen
     build-depends:    language-lustre
                     , text
                     , containers
@@ -40,9 +40,9 @@ library
                     , filepath
                     , prettyprinter
                     , alex-tools
-                     -- , language-c-quote
-                     -- , mainland-pretty
-                     -- , srcloc
+                    , language-c-quote
+                    , mainland-pretty
+                    , srcloc
     ghc-options:      -fdefer-typed-holes
 
 executable lustre-compiler

@@ -68,7 +68,7 @@ instance Pretty SystemDecl where
 
 instance Pretty Tc where
   pretty tc = case tc of
-    Define lhs clk rhs -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> pretty clk
+    Define lhs clk rhs -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                   , PP.indent 4 (pretty rhs)
                                   ]
     Next lhs clk e  -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> pretty clk

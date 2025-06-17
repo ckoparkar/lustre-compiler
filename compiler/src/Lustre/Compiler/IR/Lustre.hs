@@ -1,9 +1,9 @@
 module Lustre.Compiler.IR.Lustre where
 
 import Language.Lustre.AST
-import Language.Lustre.Name
+import Language.Lustre.Name as N
 import Lustre.Compiler.Monad ( Unique, MonadGen(..), newUniq )
-import Data.Text ( pack )
+import Data.Text ( Text, pack )
 import AlexTools ( startPos )
 import Data.Map qualified as Map
 import Prettyprinter ( Pretty(..) )
@@ -96,7 +96,16 @@ freshLabel =
      pure $ Label lbl (SourceRange (startPos lbl) (startPos lbl))
 
 nameToIdent :: Name -> Ident
-nameToIdent = origNameToIdent . nameOrigName
+nameToIdent nm =
+  case nm of
+    Unqual i -> i
+    Qual{}   -> error $ "nameToIdent: " ++ show nm
+
+nameText :: Name -> Text
+nameText = N.identText . nameToIdent
+
+identText :: Ident -> Text
+identText = N.identText
 
 bindLocals :: [LocalDecl] -> NodeDecl -> NodeDecl
 bindLocals new nd =
@@ -114,7 +123,7 @@ instance Pretty Label where
   pretty = pretty . labText
 
 instance Pretty Ident where
-  pretty i = pretty (identText i)
+  pretty i = pretty (N.identText i)
 
 instance Pretty Name where
   pretty x = pretty (showPP x)
@@ -133,6 +142,7 @@ instance Pretty Binder where
 
 instance Pretty TopDecl where
   pretty x = pretty (showPP x)
+  prettyList xs = PP.vsep (PP.punctuate PP.line (map pretty xs))
 
 instance Pretty PrimNode where
   pretty x = pretty (showPP x)

@@ -1,7 +1,15 @@
-module Lustre.Compiler.IR.Base where
+module Lustre.Compiler.IR.Base
+  ( module Lustre.Compiler.IR.Base
+  , module Language.Lustre.AST
+  , module Language.Lustre.Name
+  ) where
 
-import Language.Lustre.Name ( Ident(..), Name(..) )
-import Language.Lustre.AST ( Type(..), TypeDecl(..), ConstDef(..), Literal(..) )
+import Language.Lustre.Name ( Ident(..), Name(..), Label(..) )
+import Language.Lustre.AST ( TypeDecl(..), ConstDef(..)
+                           , Literal(..), Type(..), LHS(..)
+                           , Field(..), Selector(..), ArraySlice(..)
+                           , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
+                           )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 import Lustre.Compiler.IR.Lustre ()
@@ -102,7 +110,7 @@ instance Pretty CType where
 
 instance Pretty Clock where
   pretty clk = case clk of
-    BaseClock  -> pretty "base clock"
+    BaseClock  -> pretty "base"
     WhenTrue a -> pretty "when" PP.<+> pretty a
 
 instance Pretty Atom where

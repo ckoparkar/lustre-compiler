@@ -1,6 +1,4 @@
 node countUp(x: real) returns (y: real);
-var z: real;
 let
-  -- z = y + 1;
   y = 0.0 fby (y + 1.0);
 tel
