@@ -1,0 +1,6 @@
+type S = { x : int; y : int };
+
+node main(s : S; z : int) returns (t : S)
+let
+  t = s { x := z };
+tel
