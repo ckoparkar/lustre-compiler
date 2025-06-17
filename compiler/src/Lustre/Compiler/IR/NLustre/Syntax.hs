@@ -8,7 +8,7 @@ module Lustre.Compiler.IR.NLustre.Syntax
   ) where
 
 import Language.Lustre.Name ( Name(..) )
-import Language.Lustre.AST ( Literal(..), CType(..), Type(..), LHS(..)
+import Language.Lustre.AST ( Literal(..), Type(..), LHS(..)
                            , Field(..), Selector(..), ArraySlice(..)
                            , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
                            )
@@ -64,13 +64,6 @@ data Expr
     {-^ Subsampling -}
   deriving Show
 
--- | Atomic expressions.
-data Atom
-  = Lit Literal CType  {-^ Constants  -}
-  | Var Name           {-^ Variable   -}
-  deriving Show
-
-
 --------------------------------------------------------------------------------
 -- Pretty printing
 --------------------------------------------------------------------------------
@@ -110,8 +103,3 @@ instance Pretty Expr where
           where ppF (Field name val) = PP.braces (pretty name PP.<+> pretty ":=" PP.<+> pretty val)
     When e b    -> pretty e PP.<+> pretty "when" PP.<+> pretty b
   prettyList exprs = PP.tupled (map pretty exprs)
-
-instance Pretty Atom where
-  pretty atom = case atom of
-    Lit c ty -> pretty c PP.<> pretty ":" PP.<> pretty ty
-    Var nm   -> pretty nm

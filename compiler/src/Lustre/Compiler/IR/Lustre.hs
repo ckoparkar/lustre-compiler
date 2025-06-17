@@ -110,20 +110,17 @@ bindLocals new nd =
 -- Pretty printing
 --------------------------------------------------------------------------------
 
-instance Pretty Name where
-  pretty x = pretty (showPP x)
-
 instance Pretty Label where
   pretty = pretty . labText
 
 instance Pretty Ident where
   pretty i = pretty (identText i)
 
-instance Pretty Literal where
+instance Pretty Name where
   pretty x = pretty (showPP x)
 
-instance Pretty CType where
-  pretty (CType ty clk) = PP.parens (pretty (showPP ty) PP.<> pretty ","  PP.<> pretty (showPP clk))
+instance Pretty Literal where
+  pretty x = pretty (showPP x)
 
 instance Pretty TypeDecl where
   pretty x = pretty (showPP x)
@@ -134,8 +131,20 @@ instance Pretty ConstDef where
 instance Pretty Binder where
   pretty x = pretty (showPP x)
 
+instance Pretty TopDecl where
+  pretty x = pretty (showPP x)
+
 instance Pretty PrimNode where
   pretty x = pretty (showPP x)
+
+instance Pretty IClock where
+  pretty x = pretty (showPP x)
+
+instance Pretty Type where
+  pretty x = pretty (showPP x)
+
+instance Pretty CType where
+  pretty (CType ty clk) = PP.parens (pretty (showPP ty) PP.<> pretty ","  PP.<> pretty (showPP clk))
 
 instance Pretty e => Pretty (LHS e) where
   pretty lhs = case lhs of

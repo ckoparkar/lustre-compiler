@@ -2,7 +2,6 @@ module Lustre.Compiler where
 
 
 import Language.Lustre.Parser               ( parseProgramFromFileLatin1 )
-import Language.Lustre.Pretty               ( showPP )
 import Language.Lustre.Transform.OrderDecls (quickOrderTopDecl)
 import Language.Lustre.TypeCheck            ( quickCheckDecls )
 import Language.Lustre.Transform.NoStatic   ( noConst )
@@ -15,10 +14,14 @@ import Lustre.Compiler.Monad            ( PassM, runPassM
                                         , Config(..), mkConfig, dbgPrint )
 import Lustre.Compiler.Options          ( Options(..), parseOptions, usageString )
 import Lustre.Compiler.Passes.Normalize ( normalizeM )
+import Lustre.Compiler.Passes.ToStc     ( toStcM     )
+import Lustre.Compiler.Passes.Schedule  ( scheduleM  )
+-- import Lustre.Compiler.Passes.ToObc     ( toObcM     )
+-- import Lustre.Compiler.Passes.Codegen   ( codegenM   )
 import Prettyprinter ( Pretty(..) )
 
 -- TEMP
-import Lustre.Compiler.IR.NLustre.Syntax qualified as NL
+import Lustre.Compiler.IR.Stc.Syntax qualified as Stc
 
 --------------------------------------------------------------------------------
 
@@ -40,13 +43,44 @@ compile config fp =
      case mbCompiled of
        Left err ->
          error (show err)
-       Right compiled ->
-         do print (pretty compiled)
+       Right _compiled ->
+         pure ()
 
-passes :: Config -> [Lus.TopDecl] -> PassM NL.Program
-passes config decls0 =
-  do decls1 <- normalizeM decls0
-     pure decls1
+passes :: Config -> [Lus.TopDecl] -> PassM Stc.Program
+passes _config p0 =
+  do p1 <- pass Identity        (pure . id)   p0
+     p2 <- pass Normalization   normalizeM    p1
+     p3 <- pass ToStc           toStcM        p2
+     p4 <- pass Scheduling      scheduleM     p3
+     -- p5 <- pass ToObc           toObcM        p4
+     -- p6 <- pass Codegen         codegenM      p5
+     -- pure p6
+     pure p4
+
+pass :: (Pretty b) => Pass -> (a -> PassM b) -> a -> PassM b
+pass name f x =
+  do dbg "--------------------------------------------------------------------------------"
+     dbg ("-- Running pass " ++ show name)
+     dbg "--------------------------------------------------------------------------------"
+     y <- f x
+     dbg (show $ pretty y)
+     pure y
+  where
+    dbg = dbgPrint passChatterLvl
+
+-- | If the verbosity level is greater than or equal to this
+--   the entire program will be printed out after each pass.
+passChatterLvl :: Word
+passChatterLvl = 3
+
+data Pass
+  = Identity
+  | Normalization
+  | ToStc
+  | Scheduling
+  -- | ToObc
+  -- | Codegen
+  deriving (Eq, Show)
 
 lusPasses :: Config -> Lus.Program -> IO [Lus.TopDecl]
 lusPasses config prg =

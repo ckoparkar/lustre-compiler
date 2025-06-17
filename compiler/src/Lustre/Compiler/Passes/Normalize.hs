@@ -10,7 +10,6 @@ import Control.Monad ( foldM )
 import Lustre.Compiler.IR.Lustre
 import Lustre.Compiler.IR.NLustre qualified as NL
 import Lustre.Compiler.Monad
-import Lustre.Utils
 
 --------------------------------------------------------------------------------
 
@@ -28,10 +27,10 @@ toNL decls = NL.Program <$> mapM toDecl decls
   where
     toDecl decl = case decl of
       Lus.DeclareType tydecl -> pure (NL.DeclareType tydecl)
-      Lus.DeclareConst const -> pure (NL.DeclareConst const)
+      Lus.DeclareConst c     -> pure (NL.DeclareConst c)
       Lus.DeclareNode nd     -> pure (NL.DeclareNode $ toNode nd)
-      Lus.DeclareNodeInst{} -> reportError (Other "normalize: unexpected DeclareNodeInst")
-      Lus.DeclareContract{} -> reportError (Other "normalize: unexpected DeclareContract")
+      Lus.DeclareNodeInst{}  -> reportError (Other "normalize: unexpected DeclareNodeInst")
+      Lus.DeclareContract{}  -> reportError (Other "normalize: unexpected DeclareContract")
 
     toNode nd =
       let eqns = case Lus.nodeDef nd of
@@ -39,8 +38,35 @@ toNL decls = NL.Program <$> mapM toDecl decls
                    Just (Lus.NodeBody _ eqs) -> concatMap toEqn eqs
           (ins, outs, locals) = nodeBinders nd
       in NL.NodeDecl (Lus.nodeName nd)
-                     (NL.NodeBinders ins outs locals)
+                     (NL.NodeBinders (map toBinder ins)
+                                     (map toBinder outs)
+                                     (map toBinder locals))
                      eqns
+
+    toBinder (Lus.Binder x ty) =
+      NL.Binder x (toCType ty)
+
+    toCType (Lus.CType ty clk) =
+      NL.CType ty (toClock clk)
+
+    toClock clk = case clk of
+      Lus.BaseClock    -> NL.BaseClock
+      Lus.ClockVar{}   -> error $ "toClock: Unexpected " ++ show clk
+      Lus.KnownClock e -> NL.WhenTrue (toClockExpr e)
+
+    toClockExpr (Lus.WhenClock _ e nm) =
+      let a1 = toLit e
+          a2 = NL.Var (NL.Unqual nm)
+      in case a1 of
+        NL.Bool True -> a2
+        _            -> error $ "toClockExpr: TODO " ++ show a1
+
+    toLit expr = case expr of
+      Lus.ERange _ e -> toLit e
+      Lus.Const e _  -> toLit e
+      Lus.Lit c      -> c
+      Lus.Var{}      -> error $ "toLit: TODO " ++ show expr
+      _              -> error $ "toLit: Unexpected " ++ show expr
 
     toEqn eqn = case eqn of
       Lus.Define lhs rhs -> [NL.Define (map toLHS lhs) (toRHS rhs)]
@@ -54,7 +80,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.ERange _ e -> toRHS e
       Lus.Call (Lus.NodeInst fn []) args _clk ctys ->
         case fn of
-          Lus.CallUser nm     -> NL.Call nm (map toAtom args) ctys
+          Lus.CallUser nm     -> NL.Call nm (map toAtom args) (fmap (fmap toCType) ctys)
           Lus.CallPrim _ prim -> case (prim, args) of
             (Lus.Op2 Lus.Fby, [Lus.Const (Lus.Lit c) _, next]) -> NL.Fby2 c (toExpr next)
             _ -> NL.CExpr (toCExpr expr)
@@ -62,7 +88,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
 
     toCExpr expr = case expr of
       Lus.Merge{} -> error "toCExpr: TODO Merge"
-      Lus.Call (Lus.NodeInst fn []) args _clk ctys ->
+      Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
         case fn of
           Lus.CallUser{} -> error $ "toCExpr: " ++ show expr
           Lus.CallPrim _ prim -> case (prim, args) of
@@ -83,21 +109,18 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.UpdateStruct nm e ls -> NL.UpdateStruct nm (toAtom e) (map (fmap toAtom) ls)
       Lus.WithThenElse{}       -> error "toExpr: TODO WithThenElse"
       Lus.Merge{}              -> error $ "toExpr: not an expression " ++ show expr
-      Lus.Call (Lus.NodeInst fn []) args _clk ctys ->
+      Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
         let args1 = map toAtom args in
           case fn of
             Lus.CallUser{}      -> error $ "toExpr: " ++ show expr
             Lus.CallPrim _ prim -> NL.CallPrim prim args1
+      Lus.Call (Lus.NodeInst _ (_x:_xs)) _args _clk __ctys ->
+        error $ "toExpr: static arguments not empty, " ++ show expr
 
     toAtom expr = case expr of
       Lus.Var x                -> NL.Var x
-      Lus.Const (Lus.Lit c) ty -> NL.Lit c ty
+      Lus.Const (Lus.Lit c) ty -> NL.Lit c (toCType ty)
       _ -> error $ "toAtom: " ++ show expr
-
-    toLit expr = case expr of
-      Lus.Lit c -> c
-      _ -> error $ "toLit: not a Lit, " ++ show expr
-
 
 --------------------------------------------------------------------------------
 
@@ -130,7 +153,7 @@ typeOfM nd e =
 --------------------------------------------------------------------------------
 
 normFbyExpr :: Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
-normFbyExpr nd expr
+normFbyExpr _nd expr
   | Lus.Call (Lus.NodeInst fn []) [e0, enext] clk (Just [ty]) <- expr
   , Lus.CallPrim range prim <- fn
   , Lus.Op2 Lus.Fby <- prim
@@ -143,7 +166,11 @@ normFbyExpr nd expr
            mapM_ (uncurry addLocal) [ (xinit, (Lus.CType Lus.BoolType Lus.BaseClock))
                                     , (px, ty)
                                     , (res, ty)]
-           let initConst = Lus.Lit (Lus.Int (-1))
+           initConst <- case ty of
+                          (Lus.CType Lus.IntType _)  -> pure $ Lus.Lit (Lus.Int 0)
+                          (Lus.CType Lus.BoolType _) -> pure $ Lus.Lit (Lus.Bool True)
+                          (Lus.CType Lus.RealType _) -> pure $ Lus.Lit (Lus.Real 0.0)
+                          _ -> reportError (Other $ "normFbyExpr: unexpected initial type, " ++ show ty)
            let true  = Lus.Const (Lus.Lit (Lus.Bool True)) (Lus.CType Lus.BoolType Lus.BaseClock)
                false = Lus.Const (Lus.Lit (Lus.Bool False)) (Lus.CType Lus.BoolType Lus.BaseClock)
                eqn1  = Lus.Define [Lus.LVar xinit]

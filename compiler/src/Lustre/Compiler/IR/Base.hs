@@ -1,7 +1,7 @@
 module Lustre.Compiler.IR.Base where
 
-import Language.Lustre.Name ( Ident(..), Label(..) )
-import Language.Lustre.AST ( Binder(..), TypeDecl(..), ConstDef(..) )
+import Language.Lustre.Name ( Ident(..), Name(..) )
+import Language.Lustre.AST ( Type(..), TypeDecl(..), ConstDef(..), Literal(..) )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 import Lustre.Compiler.IR.Lustre ()
@@ -42,6 +42,26 @@ data BaseEqnGroup eqn
   | Rec [eqn]     -- ^ A group of recursive equations.
   deriving Show
 
+-- | Introduces a local variable.
+data Binder = Binder
+  { binderDefines :: Ident
+  , binderType    :: CType
+  }
+  deriving Show
+
+-- | Type on a boolean clock.
+data CType = CType { cType :: Type, cClock :: Clock }
+  deriving Show
+
+-- | A boolean clock.  The base clock is always @true@.
+data Clock = BaseClock | WhenTrue Atom
+  deriving Show
+
+-- | Atomic expressions.
+data Atom
+  = Lit Literal CType  {-^ Constants  -}
+  | Var Name           {-^ Variable   -}
+  deriving Show
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -70,3 +90,22 @@ instance Pretty e => Pretty (BaseNodeDecl e) where
                       , PP.indent 4 (pretty (nodeEqns nd))
                       , pretty "tel"
                       ]
+
+instance Pretty Binder where
+  pretty (Binder x ty) = pretty x PP.<> pretty ":" PP.<> pretty ty
+  prettyList binds   = PP.tupled (map pretty binds)
+
+instance Pretty CType where
+  pretty (CType ty clk) = case clk of
+    BaseClock  -> pretty ty
+    WhenTrue a -> pretty ty PP.<+> pretty "when" PP.<+> pretty a
+
+instance Pretty Clock where
+  pretty clk = case clk of
+    BaseClock  -> pretty "base clock"
+    WhenTrue a -> pretty "when" PP.<+> pretty a
+
+instance Pretty Atom where
+  pretty atom = case atom of
+    Lit c ty -> pretty c PP.<> pretty ":" PP.<> pretty ty
+    Var nm   -> pretty nm
