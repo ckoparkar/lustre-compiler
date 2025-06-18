@@ -15,13 +15,13 @@ library
     import:           base
     hs-source-dirs:   src
     exposed-modules:  Lustre.Compiler
-                      Lustre.Compiler.IR.Lustre
                       Lustre.Compiler.IR.NLustre
                       Lustre.Compiler.IR.Stc
                       Lustre.Compiler.IR.Obc
     other-modules:    Lustre.Utils
                       Lustre.Compiler.Options
                       Lustre.Compiler.Monad
+                      Lustre.Compiler.IR.Lustre.Compat
                       Lustre.Compiler.IR.Base
                       Lustre.Compiler.IR.NLustre.Syntax
                       Lustre.Compiler.IR.Stc.Syntax

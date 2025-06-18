@@ -1,15 +1,9 @@
 module Lustre.Compiler.IR.Stc.Syntax
   ( Program, SystemDecl(..), Tc(..)
   , module Lustre.Compiler.IR.NLustre.Syntax
-  , module Language.Lustre.AST
   , module Lustre.Compiler.IR.Base
   ) where
 
-import Language.Lustre.AST ( Literal(..), Type(..)
-                           , LHS(..), Field(..), Selector(..), ArraySlice(..)
-                           , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
-                           )
-import Language.Lustre.Name
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
 
@@ -21,11 +15,11 @@ import Lustre.Compiler.IR.Base
 type Program = BaseProgram SystemDecl
 
 data SystemDecl = SystemDecl
-  { sysName      :: Ident
-  , sysBinders   :: NodeBinders
+  { sysName      :: CompName
+  , sysBinders   :: NodeBinders CType
   , sysTcs       :: [Tc]
   , sysInits     :: [(LHS Atom, Literal)]
-  , sysInstances :: [(Name, Ident)]
+  , sysInstances :: [(CompName, CompName)]
   }
   deriving Show
 
@@ -33,12 +27,12 @@ data SystemDecl = SystemDecl
 data Tc
   = Define (LHS Atom) Clock CExpr  {-^ Basic -}
   | Next (LHS Atom) Clock Expr     {-^ Next  -}
-  | Call                            {-^ Function call -}
+  | Call                           {-^ Function call -}
       { cBinds :: [LHS Atom]
       , cClk   :: Clock
-      , cName  :: Name
+      , cName  :: CompName
       , cArgs  :: [Atom]
-      , cAnn   :: (Ident, Bool)
+      , cAnn   :: (CompName, Bool)
       }
   deriving Show
 
@@ -47,7 +41,7 @@ data Tc
 --------------------------------------------------------------------------------
 
 instance Pretty SystemDecl where
-  pretty sys = PP.vsep [ pretty "system" PP.<+> pretty (sysName sys) PP.<> PP.lbrace
+  pretty sys = PP.vsep [ pretty "system" PP.<+> pretty (sysName sys) PP.<+> PP.lbrace
                        , PP.indent 4 $ PP.vsep
                          [ pretty "system" PP.<+>
                            PP.vsep (map (\(x,y) -> pretty x PP.<> pretty y) (sysInstances sys)) PP.<>
@@ -71,10 +65,10 @@ instance Pretty Tc where
     Define lhs clk rhs -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                   , PP.indent 4 (pretty rhs)
                                   ]
-    Next lhs clk e  -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> pretty clk
+    Next lhs clk e  -> PP.vsep [ pretty "next " PP.<> pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                , PP.indent 4 (pretty e)
                                ]
-    Call lhs clk f args ann -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> pretty clk
+    Call lhs clk f args ann -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                        , PP.indent 4 $
                                            (pretty f PP.<>
                                             PP.langle PP.<> pretty ann PP.<> PP.rangle PP.<>

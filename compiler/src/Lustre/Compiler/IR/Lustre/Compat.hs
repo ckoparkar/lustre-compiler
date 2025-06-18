@@ -1,9 +1,12 @@
-module Lustre.Compiler.IR.Lustre where
+{-# OPTIONS_GHC -Wno-orphans #-}
+
+module Lustre.Compiler.IR.Lustre.Compat
+  ( TypeOf(..), freshIdent, nodeBinders, bindLocals ) where
 
 import Language.Lustre.AST
-import Language.Lustre.Name as N
+import Language.Lustre.Name as Name
 import Lustre.Compiler.Monad ( Unique, MonadGen(..), newUniq )
-import Data.Text ( Text, pack )
+import Data.Text ( pack )
 import AlexTools ( startPos )
 import Data.Map qualified as Map
 import Prettyprinter ( Pretty(..) )
@@ -18,7 +21,7 @@ class TypeOf a where
 instance TypeOf Expression where
   typeOf nd expr = case expr of
     ERange _ e -> typeOf nd e
-    Var x      -> [(nodeEnv nd) Map.! (nameToIdent x)]
+    Var x      -> [(nodeEnv nd) Map.! (origNameToIdent (nameOrigName x))]
     Lit c      -> case c of
                     Int{}  -> [CType IntType BaseClock]
                     Real{} -> [CType RealType BaseClock]
@@ -36,7 +39,10 @@ instance TypeOf Expression where
                           Nothing  -> []
                           Just tys -> tys
     _ -> error $ "typeOf: TODO " ++ show expr
-
+    where
+      nodeEnv nd0 =
+        let (ins, outs, locals) = nodeBinders nd0
+        in Map.fromList $ map (\(Binder x ty) -> (x,ty)) (ins ++ outs ++ locals)
 
 instance Functor LHS where
   fmap f lhs = case lhs of
@@ -54,6 +60,15 @@ instance Functor ArraySlice where
     ArraySlice (f start) (f end) (fmap f step)
 
 --------------------------------------------------------------------------------
+
+freshIdent :: MonadGen Unique m => m Ident
+freshIdent =
+  do i <- newUniq
+     let txt    = pack "x"
+         lbl    = Label txt (SourceRange (startPos txt) (startPos txt))
+         unqual = Ident lbl Nothing
+         orig   = OrigName (fromInteger i) Nothing unqual AVal
+     pure (Ident lbl (Just orig))
 
 nodeBinders :: NodeDecl -> ([Binder], [Binder], [Binder])
 nodeBinders nd =
@@ -73,47 +88,12 @@ nodeBinders nd =
                          lcls
   in (ins1, outs, locals)
 
-
-nodeEnv :: NodeDecl -> Map.Map Ident CType
-nodeEnv nd =
-  let (ins, outs, locals) = (nodeBinders nd)
-  in Map.fromList $ map (\(Binder x ty) -> (x,ty)) (ins ++ outs ++ locals)
-
-freshName :: MonadGen Unique m => m Name
-freshName =
-  do ident <- freshIdent
-     pure $ Unqual ident
-
-freshIdent :: MonadGen Unique m => m Ident
-freshIdent =
-  do lbl <- freshLabel
-     pure $ Ident lbl Nothing
-
-freshLabel :: MonadGen Unique m => m Label
-freshLabel =
-  do i <- newUniq
-     let lbl = pack  ("x_" ++ show i)
-     pure $ Label lbl (SourceRange (startPos lbl) (startPos lbl))
-
-nameToIdent :: Name -> Ident
-nameToIdent nm =
-  case nm of
-    Unqual i -> i
-    Qual{}   -> error $ "nameToIdent: " ++ show nm
-
-nameText :: Name -> Text
-nameText = N.identText . nameToIdent
-
-identText :: Ident -> Text
-identText = N.identText
-
 bindLocals :: [LocalDecl] -> NodeDecl -> NodeDecl
 bindLocals new nd =
   case nodeDef nd of
     Nothing -> nd
     Just (NodeBody locals eqns) ->
       nd { nodeDef = Just (NodeBody (locals ++ new) eqns) }
-
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -123,7 +103,7 @@ instance Pretty Label where
   pretty = pretty . labText
 
 instance Pretty Ident where
-  pretty i = pretty (N.identText i)
+  pretty i = pretty (Name.identText i)
 
 instance Pretty Name where
   pretty x = pretty (showPP x)
@@ -151,6 +131,12 @@ instance Pretty IClock where
   pretty x = pretty (showPP x)
 
 instance Pretty Type where
+  pretty x = pretty (showPP x)
+
+instance Pretty ModName where
+  pretty x = pretty (showPP x)
+
+instance Pretty Thing where
   pretty x = pretty (showPP x)
 
 instance Pretty CType where

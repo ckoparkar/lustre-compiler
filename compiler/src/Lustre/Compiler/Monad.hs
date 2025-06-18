@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module Lustre.Compiler.Monad
   ( module Lustre.Compiler.Monad
   , MonadGen(..) )

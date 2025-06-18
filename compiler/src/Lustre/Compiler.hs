@@ -62,7 +62,7 @@ passes _config p0 =
      p4 <- pass Scheduling      scheduleM     p3
      p5 <- pass ToObc           toObcM        p4
      p6 <- pass Codegen         codegenM      p5
-     pure p6
+     pure (show p6)
 
 pass :: (Pretty b) => Pass -> (a -> PassM b) -> a -> PassM b
 pass name f x =

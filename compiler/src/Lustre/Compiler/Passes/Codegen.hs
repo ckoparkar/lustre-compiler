@@ -15,12 +15,9 @@ import Data.Foldable ( fold )
 import Data.Loc ( noLoc )
 import Data.List ( intersperse )
 import Foreign.Marshal.Utils ( fromBool )
-import Data.Text ( Text, pack, unpack )
 
 import Lustre.Compiler.Monad ( PassM )
 import Lustre.Compiler.IR.Obc
-import Lustre.Compiler.IR.Lustre ( nameToIdent, nameText, identText )
-import Lustre.Compiler.IR.Base hiding (Lit, Var)
 
 --------------------------------------------------------------------------------
 
@@ -31,8 +28,8 @@ codegen :: Program -> String
 codegen (Program decls) = asLib $ fold (map go decls)
   where
     go d = case d of
-      DeclareType{}   -> error $ "TODO: " ++ show d
-      DeclareConst{}  -> error $ "TODO: " ++ show d
+      DeclareType{}   -> _todo
+      DeclareConst{}  -> _todo
       DeclareNode cls -> cgClass cls
 
 data CParts = CParts
@@ -68,20 +65,20 @@ mkClassStruct (ClassDecl name mems insts _fns) =
   [C.cedecl| struct $id:name {$sdecls:fields}; |]
   where
     structTyPtr nm = [C.cty| struct $id:nm *|]
-    fields = map (\(Binder x (CType ty _)) -> [C.csdecl| $ty:(cgType ty) $id:x; |]) mems ++
+    fields = map (\(Binder x ty) -> [C.csdecl| $ty:(cgType ty) $id:x; |]) mems ++
              map (\(f,x) ->  [C.csdecl| $ty:(structTyPtr f) $id:x; |] ) insts
 
-cgMethod :: Text -> Method -> C.Definition
+cgMethod :: CompName -> Method -> C.Definition
 cgMethod cls (Method name (NodeBinders ins outs _locals) body) =
   C.FuncDef [C.cfun| void $id:mname ($params:params) {$items:cbody} |] noLoc
   where
     mname   = methodName cls name
     params  = [[C.cparam| struct $id:cls* $id:self |]] ++
-              map (\(Binder x (CType ty _)) -> [C.cparam| $ty:(cgType ty) $id:x |]) ins ++
-              map (\(Binder x (CType ty _)) -> [C.cparam| $ty:(cgType ty)* $id:x |]) outs
+              map (\(Binder x ty) -> [C.cparam| $ty:(cgType ty) $id:x |]) ins ++
+              map (\(Binder x ty) -> [C.cparam| $ty:(cgType ty)* $id:x |]) outs
     cbody   = map C.BlockStm ((cgStmt (map binderDefines outs)) body)
 
-cgStmt :: [Ident] -> Stmt -> [C.Stm]
+cgStmt :: [CompName] -> Stmt -> [C.Stm]
 cgStmt outs = go
   where
     go stmt = case stmt of
@@ -92,13 +89,13 @@ cgStmt outs = go
           LVar x -> if x `elem` outs
                     then [[C.cstm| *$id:x = $exp:(cgExpr outs e); |]]
                     else [[C.cstm| $id:x = $exp:(cgExpr outs e); |]]
-          LSelect{} -> error $ "cgStmt: TODO " ++ show lhs
+          LSelect{} -> _todo
 
 
       LetState lhs e ->
         case lhs of
           LVar x -> [[C.cstm| $id:self->$id:x = $exp:(cgExpr outs e); |]]
-          LSelect{} -> error $ "cgStmt: TODO " ++ show lhs
+          LSelect{} -> _todo
 
       If cnd thn els ->
         [[C.cstm| if ($exp:(cgExpr outs cnd)) {
@@ -109,28 +106,31 @@ cgStmt outs = go
 
       LetCall{..} ->
         let (cls,y) = lcClass
-            mname   = methodName (nameText cls) lcRator
+            mname   = methodName cls lcRator
             args    = [[C.cexp| $id:self->$id:y |]] ++
                       map (cgExpr outs) lcRands ++
                       map (\lhs -> case lhs of
                              LVar x -> if x `elem` outs
                                        then [C.cexp| $id:x |]
                                        else [C.cexp| &$id:x |]
-                             LSelect{} -> error $ "cgStmt: TODO " ++ show lhs)
+                             LSelect{} -> _todo)
                           lcBinds
         in [[C.cstm| $id:mname($args:args); |]]
 
-cgExpr :: [Ident] -> Expr -> C.Exp
+cgExpr :: [CompName] -> Expr -> C.Exp
 cgExpr outs = go
   where
     go expr = case expr of
-      Lit c             -> [C.cexp| $const:c |]
-      Var x
-        | nameToIdent x `elem` outs
-                        -> [C.cexp| *$id:x |]
-        | otherwise     -> [C.cexp| $id:x |]
-      SVar x            -> [C.cexp| $id:self->$id:x |]
-      CallPrim pr ls    -> cgPrimApp pr (map go ls)
+      Atom atom         -> cgAtom outs atom
+      CallPrim pr ls    -> cgPrimApp pr (map (cgAtom outs) ls)
+
+cgAtom :: [CompName] -> Atom -> C.Exp
+cgAtom outs atom = case atom of
+  Lit c             -> [C.cexp| $const:c |]
+  Var x
+    | x `elem` outs -> [C.cexp| *$id:x |]
+    | otherwise     -> [C.cexp| $id:x |]
+  SVar x            -> [C.cexp| $id:self->$id:x |]
 
 cgPrimApp :: PrimNode -> [C.Exp] -> C.Exp
 cgPrimApp pr cargs = case (pr, cargs) of
@@ -143,10 +143,11 @@ cgType ty = case ty of
   IntType  -> [C.cty| typename int64_t |]
   RealType -> [C.cty| double |]
   BoolType -> [C.cty| typename bool |]
-  _         -> error $ "cgType: " ++ show ty
+  _         -> _todo
 
-methodName :: Text -> Text -> Text
-methodName cls name = cls <> (pack "_") <> name
+methodName :: CompName -> CompName -> String
+methodName cls mthd =
+  compNameToString cls <> "_" <> compNameToString mthd
 
 render :: MPP.Pretty a => a -> String
 render = MPP.pretty 80 . MPP.ppr
@@ -162,11 +163,11 @@ instance C.ToConst Literal where
     Real f -> C.toConst f loc
     Bool b -> C.toConst (fromBool @Int b) loc
 
-instance C.ToIdent Name where
-  toIdent x loc = C.toIdent (nameText x) loc
+instance C.ToIdent CompName where
+  toIdent x loc = C.toIdent (compNameToString x) loc
 
-instance C.ToIdent Ident where
-  toIdent x loc = C.toIdent (identText x) loc
+-- instance C.ToIdent Ident where
+--   toIdent x loc = C.toIdent (identText x) loc
 
-instance C.ToIdent Text where
-  toIdent x loc = C.toIdent (unpack x) loc
+-- instance C.ToIdent Text where
+--   toIdent x loc = C.toIdent (unpack x) loc

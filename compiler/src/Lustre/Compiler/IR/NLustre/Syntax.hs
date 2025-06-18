@@ -2,42 +2,35 @@ module Lustre.Compiler.IR.NLustre.Syntax
   ( Program, NodeDecl
   , Equation(..), RHS(..)
   , CExpr(..), Expr(..), Atom(..)
-  , module Language.Lustre.AST
-  , module Language.Lustre.Name
   , module Lustre.Compiler.IR.Base
   ) where
 
-import Language.Lustre.Name ( Name(..) )
-import Language.Lustre.AST ( Literal(..), Type(..), LHS(..)
-                           , Field(..), Selector(..), ArraySlice(..)
-                           , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
-                           )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 
 import Lustre.Compiler.IR.Base
-import Lustre.Compiler.IR.Lustre ()
+import Lustre.Compiler.IR.Lustre.Compat ()
 
 --------------------------------------------------------------------------------
 
 type Program  = BaseProgram NodeDecl
-type NodeDecl = BaseNodeDecl Equation
+type NodeDecl = BaseNodeDecl Equation CType
 
 data Equation = Define [LHS Atom] RHS
   deriving Show
 
 -- | Equations.
 data RHS
-  = CExpr CExpr                     {-^ Definition -}
-  | Fby2 Literal Expr               {-^ Delay      -}
-  | Call Name [Atom] (Maybe [CType]) {-^ Apply node -}
+  = CExpr CExpr                     {-^ Definition    -}
+  | Fby2 Literal Expr               {-^ Unit delay    -}
+  | Call CompName [Atom] [CType]    {-^ Function call -}
   deriving Show
 
 -- | Control expressions.
 data CExpr
   = Expr Expr
     {-^ Simple expressions -}
-  | Merge (Name, CType) [(Literal, Atom)]
+  | Merge (CompName, CType) [(Literal, Atom)]
     {-^ Oversampling -}
   | If Atom Expr Expr
     {-^ Multiplexing -}
@@ -52,10 +45,10 @@ data Expr
   | Tuple ![Atom]
   | Array ![Atom]
   | Select Atom (Selector Atom)
-  | Struct Name [Field Atom]
+  | Struct CompName [Field Atom]
     {-^ Create a new struct value.  'Name' is the struct type -}
 
-  | UpdateStruct (Maybe Name) Atom [Field Atom]
+  | UpdateStruct CompName Atom [Field Atom]
     {-^ Update a struct.
       The 'Name' is the struct type.
       The expression is the struct being updated. -}
@@ -95,11 +88,8 @@ instance Pretty Expr where
     Array es      -> PP.brackets (PP.hsep (PP.punctuate PP.comma (map pretty es)))
     Select e s    -> pretty e PP.<> pretty s
     Struct s fs   -> pretty s PP.<+> PP.braces (PP.vcat (PP.punctuate PP.semi (map pretty fs)))
-    UpdateStruct mb x fs ->
-      case mb of
-        Just s -> pretty s PP.<+> PP.braces (pretty x PP.<+> pretty "with" PP.<+>
+    UpdateStruct s x fs ->
+      pretty s PP.<+> PP.braces (pretty x PP.<+> pretty "with" PP.<+>
                                              PP.vcat (PP.punctuate PP.semi (map pretty fs)))
-        Nothing -> pretty x PP.<+> PP.hsep (map ppF fs)
-          where ppF (Field name val) = PP.braces (pretty name PP.<+> pretty ":=" PP.<+> pretty val)
     When e b    -> pretty e PP.<+> pretty "when" PP.<+> pretty b
   prettyList exprs = PP.tupled (map pretty exprs)
