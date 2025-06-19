@@ -1,6 +1,6 @@
 module Lustre.Compiler.IR.Base
   ( BaseProgram(..), BaseTopDecl(..), BaseNodeDecl(..), BaseEqnGroup(..)
-  , TypeDecl(..), TypeDef(..), FieldType(..), ConstDef(..), NodeBinders(..)
+  , TypeDecl(..), TypeDef(..), FieldType(..), Selector(..), ConstDef(..), NodeBinders(..)
   , Binder(..), LHS(..), CType(..), Type(..), Clock(..), Atom(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
@@ -11,7 +11,7 @@ module Lustre.Compiler.IR.Base
 
 import Language.Lustre.Name qualified as Name
 import Language.Lustre.Name ( ModName(..), Thing(..) )
-import Language.Lustre.AST ( Literal(..), Selector(..), ArraySlice(..)
+import Language.Lustre.AST ( Literal(..), ArraySlice(..)
                            , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
                            )
 import Lustre.Compiler.IR.Lustre.Compat ()
@@ -62,6 +62,18 @@ data FieldType = FieldType
   , fieldDefault  :: Maybe Literal
     -- ^ Optional default constant value, used if the field is omitted.
   } deriving Show
+
+data Selector e
+  = SelectField Text
+  | SelectElement e
+  | SelectSlice (ArraySlice e)
+  deriving (Show, Eq, Ord)
+
+instance Functor Selector where
+  fmap f sel = case sel of
+    SelectField x   -> SelectField x
+    SelectElement e -> SelectElement (f e)
+    SelectSlice e   -> SelectSlice (fmap f e)
 
 -- | Note: only one of the type or definition may be "Nothing".
 data ConstDef = ConstDef
@@ -248,6 +260,13 @@ instance Pretty FieldType where
     where optVal = case fieldDefault ft of
                      Nothing -> mempty
                      Just e  -> PP.space PP.<> pretty "=" PP.<+> pretty e
+
+instance Pretty e => Pretty (Selector e) where
+  pretty sel =
+    case sel of
+      SelectField i       -> pretty "." PP.<> pretty i
+      SelectElement e     -> PP.brackets (pretty e)
+      SelectSlice e       -> PP.brackets (pretty e)
 
 instance Pretty a => Pretty (NodeBinders a) where
   pretty (NodeBinders ins outs locals) =

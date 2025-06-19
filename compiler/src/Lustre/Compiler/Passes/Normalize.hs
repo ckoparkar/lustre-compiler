@@ -9,6 +9,7 @@ import Control.Monad ( foldM )
 import Lustre.Compiler.IR.Lustre.Compat
 import Lustre.Compiler.IR.NLustre qualified as NL
 import Lustre.Compiler.Monad
+import Lustre.Utils ( todo )
 
 --------------------------------------------------------------------------------
 
@@ -68,6 +69,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.RealType          -> NL.RealType
       Lus.BoolType          -> NL.BoolType
       Lus.NamedType nm      -> NL.NamedType (NL.compNameFromName nm)
+      Lus.ArrayType{}       -> todo ty
       Lus.IntSubrange e1 e2 ->
         case (e1, e2) of
           (Lus.Lit (Lus.Int i1), Lus.Lit (Lus.Int i2)) -> NL.IntSubrange i1 i2
@@ -83,13 +85,13 @@ toNL decls = NL.Program <$> mapM toDecl decls
           a2 = NL.Var (NL.compNameFromIdent nm)
       in case a1 of
         NL.Bool True -> a2
-        _            -> _todo
+        oth          -> todo oth
 
     toLit expr = case expr of
       Lus.ERange _ e -> toLit e
       Lus.Const e _  -> toLit e
       Lus.Lit c      -> c
-      Lus.Var{}      -> _todo
+      Lus.Var{}      -> todo expr
       _              -> bad $ "toLit: " ++ show expr
 
     toEqn eqn = case eqn of
@@ -98,7 +100,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
 
     toLHS lhs = case lhs of
       Lus.LVar x        -> NL.LVar (NL.compNameFromIdent x)
-      Lus.LSelect x sel -> NL.LSelect (toLHS x) (fmap toAtom sel)
+      Lus.LSelect x sel -> NL.LSelect (toLHS x) (toSel sel)
 
     toRHS expr = case expr of
       Lus.ERange _ e -> toRHS e
@@ -111,7 +113,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
       _ -> NL.CExpr (toCExpr expr)
 
     toCExpr expr = case expr of
-      Lus.Merge{} -> _todo
+      Lus.Merge{} -> todo expr
       Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
         case fn of
           Lus.CallUser{} -> bad $ "toCExpr: " ++ show expr
@@ -125,14 +127,14 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.Var{}      -> NL.Atom (toAtom expr)
       Lus.Lit{}      -> NL.Atom (toAtom expr)
       Lus.Const{}    -> NL.Atom (toAtom expr)
-      Lus.When{}     -> _todo
+      Lus.When{}     -> todo expr
       Lus.Tuple ls   -> NL.Tuple (map toAtom ls)
       Lus.Array ls   -> NL.Array (map toAtom ls)
-      Lus.Select e sel         -> NL.Select (toAtom e) (fmap toAtom sel)
+      Lus.Select e sel         -> NL.Select (toAtom e) (toSel sel)
       Lus.Struct nm ls         -> NL.Struct (NL.compNameFromName nm) (map (fmap toAtom) (map toField ls))
       Lus.UpdateStruct Nothing _ _    -> bad $ "toExpr: " ++ show expr
       Lus.UpdateStruct (Just nm) e ls -> NL.UpdateStruct (NL.compNameFromName nm) (toAtom e) (map (fmap toAtom) (map toField ls))
-      Lus.WithThenElse{}       -> _todo
+      Lus.WithThenElse{}       -> todo expr
       Lus.Merge{}              -> bad $ "toExpr: " ++ show expr
       Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
         let args1 = map toAtom args in
@@ -148,6 +150,11 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.Var x                -> NL.Var (NL.compNameFromName x)
       Lus.Const (Lus.Lit c) ty -> NL.Lit c (toCType ty)
       _ -> bad $ "toAtom: " ++ show expr
+
+    toSel sel = case sel of
+      Lus.SelectField lbl -> NL.SelectField (Name.labText lbl)
+      Lus.SelectElement e -> NL.SelectElement (toAtom e)
+      Lus.SelectSlice e   -> NL.SelectSlice (fmap toAtom e)
 
 bad :: String -> a
 bad msg = error ("Unexpected " ++ msg)
@@ -173,17 +180,17 @@ addLocal :: Name.Ident -> Lus.CType -> M ()
 addLocal x ty =
   St.modify (\ns -> ns { nLocals = (Lus.Binder x ty) : (nLocals ns) })
 
-typeOfM :: TypeOf a => Lus.NodeDecl -> a -> M [Lus.CType]
-typeOfM nd e =
+typeOfM :: TypeOf a => [Lus.TypeDecl] -> Lus.NodeDecl -> a -> M [Lus.CType]
+typeOfM tyDecls nd e =
   do st <- St.get
      let locals = map Lus.LocalVar (nLocals st)
          nd1    = bindLocals locals nd
-     pure (typeOf nd1 e)
+     pure (typeOf tyDecls nd1 e)
 
 --------------------------------------------------------------------------------
 
-normFbyExpr :: Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
-normFbyExpr _nd expr
+normFbyExpr :: [Lus.TypeDecl] -> Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
+normFbyExpr _tyDecls _nd expr
   | Lus.Call (Lus.NodeInst fn []) [e0, enext] clk (Just [ty]) <- expr
   , Lus.CallPrim range prim <- fn
   , Lus.Op2 Lus.Fby <- prim
@@ -223,8 +230,8 @@ normFbyExpr _nd expr
   | otherwise
   = pure (expr, [])
 
-toAnfExpr :: Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
-toAnfExpr nd expr = case expr of
+toAnfExpr :: [Lus.TypeDecl] -> Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
+toAnfExpr tyDecls nd expr = case expr of
   Lus.Lit{}   -> reportError (Other $ "Unexpected: " ++ show expr)
   Lus.Var{}   -> pure (expr, [])
   Lus.Const{} -> pure (expr, [])
@@ -247,11 +254,11 @@ toAnfExpr nd expr = case expr of
        let rhs = Lus.Select expr2 selector1
        bind rhs (eqns1 ++ eqns2)
   Lus.Struct nm fields ->
-    do (fields1, eqns) <- foldOnExprs toAnfField nd fields
+    do (fields1, eqns) <- foldE toAnfField tyDecls nd fields
        let rhs = Lus.Struct nm fields1
        bind rhs eqns
   Lus.UpdateStruct nm expr1 fields ->
-    do (fields1, eqns1) <- foldOnExprs toAnfField nd fields
+    do (fields1, eqns1) <- foldE toAnfField tyDecls nd fields
        (expr2, eqns2) <- go expr1
        let rhs = Lus.UpdateStruct nm expr2 fields1
        bind rhs (eqns1 ++ eqns2)
@@ -260,29 +267,29 @@ toAnfExpr nd expr = case expr of
        let rhs = Lus.Call fn args1 clk ctys
        bind rhs eqns
   Lus.Merge nm alts ->
-    do (alts1, eqns) <- foldOnExprs toAnfAlt nd alts
+    do (alts1, eqns) <- foldE toAnfAlt tyDecls nd alts
        let rhs = Lus.Merge nm alts1
        bind rhs eqns
   Lus.WithThenElse{} -> reportError (Other $ "TODO: " ++ show expr)
   where
-    go = toAnfExpr nd
-    toAnfExprs = foldOnExprs toAnfExpr nd
+    go = toAnfExpr tyDecls nd
+    toAnfExprs = foldE toAnfExpr tyDecls nd
 
     bind rhs eqns =
       do ident <- freshIdent
          let nm  = Name.Unqual ident
              lhs = Lus.LVar ident
              eqn =  Lus.Define [lhs] rhs
-         [ty]  <- typeOfM nd rhs
+         [ty]  <- typeOfM tyDecls nd rhs
          addLocal ident ty
          pure (Lus.Var nm, eqn:eqns)
 
-    toAnfAlt _nd (Lus.MergeCase pat rhs) =
+    toAnfAlt _tyDecls _nd (Lus.MergeCase pat rhs) =
       do (pat1, eqns1) <- go pat
          (rhs1, eqns2) <- go rhs
          pure (Lus.MergeCase pat1 rhs1, eqns1 ++ eqns2)
 
-    toAnfField _nd (Lus.Field fnm fval) =
+    toAnfField _tyDecls _nd (Lus.Field fnm fval) =
       do (fval1, eqns) <- go fval
          pure (Lus.Field fnm fval1, eqns)
 
@@ -305,7 +312,7 @@ toAnfExpr nd expr = case expr of
 
 --------------------------------------------------------------------------------
 
-traversePrg :: (Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation]))
+traversePrg :: ([Lus.TypeDecl] -> Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation]))
             -> [Lus.TopDecl] -> PassM [Lus.TopDecl]
 traversePrg f prg = traverse goDecl prg
   where
@@ -316,6 +323,13 @@ traversePrg f prg = traverse goDecl prg
       Lus.DeclareNode nd -> Lus.DeclareNode <$> goNode nd
       Lus.DeclareNodeInst{} -> reportError (Other "normalize: bad DeclareNodeInst")
       Lus.DeclareContract{} -> reportError (Other "normalize: bad DeclareContract")
+
+    tyDecls = foldr
+                (\decl acc -> case decl of
+                    Lus.DeclareType d -> d : acc
+                    _ -> acc)
+                []
+                prg
 
     goNode :: Lus.NodeDecl -> PassM Lus.NodeDecl
     goNode nd =
@@ -329,15 +343,15 @@ traversePrg f prg = traverse goDecl prg
 
     goEqn nd eqn = case eqn of
       Lus.Define lhs rhs ->
-        do (rhs1, more) <- f nd rhs
+        do (rhs1, more) <- f tyDecls nd rhs
            pure (more ++ [Lus.Define lhs rhs1])
       _ -> pure [eqn]
 
-foldOnExprs :: (Lus.NodeDecl -> expr -> M (expr, [eqn]))
-            -> Lus.NodeDecl -> [expr] -> M ([expr], [eqn])
-foldOnExprs f nd exprs =
+foldE :: ([Lus.TypeDecl] -> Lus.NodeDecl -> expr -> M (expr, [eqn]))
+      -> [Lus.TypeDecl] -> Lus.NodeDecl -> [expr] -> M ([expr], [eqn])
+foldE f tyDecls nd exprs =
   foldM (\(accExprs,accEqns) expr ->
-           do (expr1,eqns) <- f nd expr
+           do (expr1,eqns) <- f tyDecls nd expr
               pure $ (accExprs ++ [expr1], accEqns ++ eqns))
         ([],[])
         exprs

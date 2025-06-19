@@ -9,18 +9,21 @@ import Lustre.Compiler.Monad ( Unique, MonadGen(..), newUniq )
 import Data.Text ( pack )
 import AlexTools ( startPos )
 import Data.Map qualified as Map
+import Data.List ( find )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 import Language.Lustre.Pretty ( showPP )
 
+import Lustre.Utils ( todo )
+
 --------------------------------------------------------------------------------
 
 class TypeOf a where
-  typeOf :: NodeDecl -> a -> [CType]
+  typeOf :: [TypeDecl] -> NodeDecl -> a -> [CType]
 
 instance TypeOf Expression where
-  typeOf nd expr = case expr of
-    ERange _ e -> typeOf nd e
+  typeOf tyDecls nd expr = case expr of
+    ERange _ e -> typeOf tyDecls nd e
     Var x      -> [(nodeEnv nd) Map.! (origNameToIdent (nameOrigName x))]
     Lit c      -> case c of
                     Int{}  -> [CType IntType BaseClock]
@@ -30,8 +33,17 @@ instance TypeOf Expression where
     -- e `When` clk ->
     -- Tuple{} ->
     -- Array{} ->
-    -- Select{} ->
-    -- Struct{} ->
+    Select e s  ->
+      case s of
+        SelectField f -> case typeOf tyDecls nd e of
+                           [CType (NamedType tyname) _] ->
+                             let ftys = fieldTys tyname
+                             in case find ((f ==) . fieldName) ftys of
+                                  Nothing -> bad $ "Unknown field, " ++ show f
+                                  Just ty -> [CType (fieldType ty) BaseClock]
+                           oth -> bad $ "Not a named type, " ++ show oth
+        oth -> todo oth
+    Struct nm _ -> [CType (NamedType nm) BaseClock]
     UpdateStruct (Just nm) _ _ -> [CType (NamedType nm) BaseClock]
     -- WithThenElse{} ->
     -- Merge{}
@@ -40,9 +52,23 @@ instance TypeOf Expression where
                           Just tys -> tys
     _ -> error $ "typeOf: TODO " ++ show expr
     where
+      fieldTys nm =
+        case find (\d -> (typeName d) == (nameToIdent nm)) tyDecls of
+          Nothing   -> bad $ "Unknown type " ++ show nm
+          Just decl -> case typeDef decl of
+                         Nothing  -> bad $ "Abstract type " ++ show nm
+                         Just def -> case def of
+                                         IsStruct fs  -> fs
+                                         IsType alias -> bad $ "Alias " ++ show alias
+                                         IsEnum e     -> bad $ "Enum " ++ show e
+
+      nameToIdent = Name.origNameToIdent . Name.nameOrigName
       nodeEnv nd0 =
         let (ins, outs, locals) = nodeBinders nd0
         in Map.fromList $ map (\(Binder x ty) -> (x,ty)) (ins ++ outs ++ locals)
+
+bad :: String -> a
+bad msg = error ("Unexpected " ++ msg)
 
 instance Functor LHS where
   fmap f lhs = case lhs of

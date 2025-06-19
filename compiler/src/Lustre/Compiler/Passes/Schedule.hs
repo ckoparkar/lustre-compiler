@@ -4,6 +4,7 @@ module Lustre.Compiler.Passes.Schedule
 import Data.List ( partition )
 import Lustre.Compiler.IR.Stc
 import Lustre.Compiler.Monad ( PassM )
+import Lustre.Utils ( todo )
 
 --------------------------------------------------------------------------------
 
@@ -32,4 +33,4 @@ reorderTcs = readStateBeforeWrite
       in oth ++ nexts
 
 _wellScheduled :: [Tc] -> Bool
-_wellScheduled = _todo
+_wellScheduled ls = todo ls

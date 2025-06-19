@@ -17,6 +17,7 @@ import Data.List ( intersperse )
 import Data.Text ( Text, unpack )
 import Foreign.Marshal.Utils ( fromBool )
 
+import Lustre.Utils ( todo )
 import Lustre.Compiler.Monad ( PassM )
 import Lustre.Compiler.IR.Obc
 
@@ -30,7 +31,7 @@ codegen (Program decls) = asLib $ fold (map go decls)
   where
     go d = case d of
       DeclareType ty  -> cgTypeDecl ty
-      DeclareConst{}  -> _todo
+      DeclareConst{}  -> todo d
       DeclareNode cls -> cgClassDecl cls
 
 data CParts = CParts
@@ -69,6 +70,7 @@ mkTypeStruct (TypeDecl name mbDef) = case mbDef of
       let cgField (FieldType fname ftype _mbDefault) =
             [C.csdecl| $ty:(cgType ftype) $id:fname; |]
       in [C.cedecl| struct $id:name {$sdecls:(map cgField fields)}; |]
+    oth -> todo oth
 
 cgClassDecl :: ClassDecl -> CParts
 cgClassDecl c@(ClassDecl name _mems _insts fns) =
@@ -90,7 +92,6 @@ cgMethod cls (Method name (NodeBinders ins outs locals) body) =
     params  = [[C.cparam| struct $id:cls* $id:self |]] ++
               map (\(Binder x ty) -> [C.cparam| $ty:(cgType ty) $id:x |]) ins ++
               map (\(Binder x ty) -> [C.cparam| $ty:(cgType ty)* $id:x |]) outs
-    outnames= map binderDefines outs
     cbody   = map (\(Binder x ty) -> C.BlockDecl [C.cdecl| $ty:(cgType ty) $id:x; |] ) locals ++
               map C.BlockStm (cgStmt body)
 
@@ -119,6 +120,8 @@ cgStmt = go
         let cgty = [C.cty| struct $id:tyname |]
         in [[C.cstm| memcpy($exp:(cgLHS to), $exp:(cgVar from), sizeof($ty:cgty)); |]]
 
+      LetAllocStruct _to _tyname -> []
+
       LetCall{..} ->
         let (cls,y) = lcClass
             mname   = methodName cls lcRator
@@ -130,7 +133,7 @@ cgStmt = go
 cgLHS :: LHS Atom -> C.Exp
 cgLHS lhs = case lhs of
   LVar v    -> cgVar v
-  LSelect{} -> _todo
+  LSelect{} -> todo lhs
 
 cgExpr :: Expr -> C.Exp
 cgExpr = go
@@ -138,6 +141,9 @@ cgExpr = go
     go expr = case expr of
       Atom atom         -> cgAtom atom
       CallPrim pr ls    -> cgPrimApp pr (map cgAtom ls)
+      Select e s        -> case s of
+                             SelectField f -> [C.cexp| $exp:(cgAtom e).$id:f |]
+                             _ -> todo s
 
 cgAtom :: Atom -> C.Exp
 cgAtom atom = case atom of
@@ -161,7 +167,7 @@ cgPrimApp :: PrimNode -> [C.Exp] -> C.Exp
 cgPrimApp pr cargs = case (pr, cargs) of
   (Op2 Add, [e1, e2]) -> [C.cexp| $exp:e1 + $exp:e2 |]
   (Op2 Mul, [e1, e2]) -> [C.cexp| $exp:e1 * $exp:e2 |]
-  oth -> error $ "cgPrimApp: Unexpected " ++ show oth
+  oth -> todo oth
 
 cgType :: Type -> C.Type
 cgType ty = case ty of
@@ -169,7 +175,7 @@ cgType ty = case ty of
   RealType     -> [C.cty| double |]
   BoolType     -> [C.cty| typename bool |]
   NamedType nm -> [C.cty| struct $id:nm |]
-  _            -> _todo
+  _            -> todo ty
 
 methodName :: CompName -> CompName -> String
 methodName cls mthd =
@@ -180,9 +186,6 @@ render = MPP.pretty 80 . MPP.ppr
 
 self :: String
 self = "_SELF"
-
-data LValue = L | R
-  deriving Show
 
 --------------------------------------------------------------------------------
 

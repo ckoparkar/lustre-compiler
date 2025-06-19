@@ -25,3 +25,6 @@ splitAtExact n ls
 
 allSame :: Eq a => [a] -> Bool
 allSame xs = and (zipWith (==) xs (tail xs))
+
+todo :: (Show a, HasCallStack) => a -> b
+todo a = error $ "TODO: " ++ show a

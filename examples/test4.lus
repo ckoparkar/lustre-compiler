@@ -1,0 +1,8 @@
+type S = struct { x : int; y : int };
+
+node f(u : S) returns (t : S)
+var z : int;
+let
+  z = u.x;
+  t = S { x = 0; y = z };
+tel

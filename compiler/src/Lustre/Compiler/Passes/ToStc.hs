@@ -5,6 +5,7 @@ import Data.Map qualified as Map
 import Lustre.Compiler.IR.NLustre qualified as NL
 import Lustre.Compiler.IR.Stc qualified as Stc
 import Lustre.Compiler.Monad ( PassM )
+import Lustre.Utils ( todo )
 
 --------------------------------------------------------------------------------
 
@@ -51,7 +52,7 @@ eqnToTc env (NL.Define lhs rhs) = case (lhs, rhs) of
   oth -> error $ "toStc: unexpected, " ++ show oth
   where
     var (NL.LVar x) = x
-    var _oth        = _todo
+    var oth         = todo oth
 
     clockOf e = case e of
       NL.LVar x      -> NL.cClock (env Map.! x)

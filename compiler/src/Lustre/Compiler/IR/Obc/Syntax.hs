@@ -56,6 +56,11 @@ data Stmt
       }
     {-^ Copy struct -}
 
+  | LetAllocStruct
+      { lasTo     :: LHS Atom
+      , lasTyName :: CompName
+      }
+
   | LetCall
       { lcBinds :: [LHS Atom]
       , lcClass :: (CompName, CompName)
@@ -68,6 +73,7 @@ data Stmt
 data Expr
   = Atom Atom
   | CallPrim PrimNode [Atom]
+  | Select Atom (Selector Atom)
   deriving Show
 
 data Atom
@@ -137,8 +143,9 @@ instance Pretty Stmt where
                               , PP.braces (pretty thn)
                               , PP.braces (pretty els)
                               ]
-    UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.vcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
+    UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.hcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
     LetCopyStruct to from _ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "copy" PP.<+> pretty from PP.<> PP.semi
+    LetAllocStruct to ty -> pretty ty PP.<+> pretty to PP.<> PP.semi
     Let x rhs -> pretty x PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetState x rhs -> pretty "state" PP.<> PP.parens (pretty x) PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetCall lhs (cls,ann) f args -> PP.vsep [ pretty lhs PP.<+> pretty ":="
@@ -153,6 +160,7 @@ instance Pretty Expr where
   pretty expr = case expr of
     Atom a -> pretty a
     CallPrim pr args -> pretty pr PP.<> pretty args
+    Select e s -> pretty e PP.<> pretty s
   prettyList exprs = PP.tupled (map pretty exprs)
 
 instance Pretty Atom where

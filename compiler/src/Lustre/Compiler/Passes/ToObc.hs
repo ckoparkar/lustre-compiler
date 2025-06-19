@@ -5,6 +5,7 @@ import Lustre.Compiler.IR.Stc qualified as Stc
 import Lustre.Compiler.IR.Obc qualified as Obc
 import Lustre.Compiler.Monad ( PassM )
 import Lustre.Compiler.IR.Base
+import Lustre.Utils ( todo )
 import Data.Text ( pack )
 import Data.Map qualified as Map
 
@@ -33,10 +34,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
     mems    = map (\(lhs,c) ->
                      case lhs of
                        LVar x -> Binder x (typeOfLit c)
-                       LSelect{} -> _todo) inits
-    memVars = map binderDefines mems
-
-    outVars = map binderDefines (nodeOutputs binders)
+                       LSelect{} -> todo lhs) inits
 
     step = Obc.Method
       { Obc.mName    = fnStep
@@ -81,23 +79,24 @@ cExprToStmt x cexpr = case cexpr of
         Obc.Do
           (Obc.LetCopyStruct (toObcLHS x) (toVar from) tyName)
           (Obc.UpdateFields (toObcLHS x) (map (fmap toObcAtom) updates))
+      Stc.Struct tyName updates ->
+        Obc.Do
+          (Obc.LetAllocStruct (toObcLHS x) tyName)
+          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcAtom) updates))
       _oth ->
-        Obc.Let (toObcLHS x) (goExpr e)
-  _ -> _todo
+        Obc.Let (toObcLHS x) (toObcExpr e)
+  oth -> todo oth
   where
-    goExpr = toObcExpr
-
     toVar from = case from of
-      Stc.Var x -> Obc.Oth x
+      Stc.Var y -> Obc.Oth y
       Stc.Lit{} -> bad ("Not a variable " ++ show from)
 
 toObcExpr :: Stc.Expr -> Obc.Expr
 toObcExpr expr = case expr of
-  Stc.Atom atom      -> Obc.Atom (goAtom atom)
-  Stc.CallPrim pr ls -> Obc.CallPrim pr (map goAtom ls)
-  _ -> _todo
-  where
-    goAtom = toObcAtom
+  Stc.Atom atom      -> Obc.Atom (toObcAtom atom)
+  Stc.CallPrim pr ls -> Obc.CallPrim pr (map toObcAtom ls)
+  Stc.Select x sel   -> Obc.Select (toObcAtom x) (fmap toObcAtom sel)
+  _ -> error $ show expr
 
 toObcAtom :: Stc.Atom -> Obc.Atom
 toObcAtom atom = case atom of
@@ -128,11 +127,13 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.Let lhs expr                  -> Obc.Let (goLHS lhs) (goExpr expr)
           Obc.LetState lhs expr             -> Obc.LetState (goLHS lhs) (goExpr expr)
           Obc.LetCopyStruct lhs from tyname -> Obc.LetCopyStruct (goAddrOf (goLHS lhs)) (Obc.Addr (goVar from)) tyname
+          Obc.LetAllocStruct lhs tyname     -> Obc.LetAllocStruct (goLHS lhs) tyname
           Obc.LetCall binds cl rator rands  -> Obc.LetCall (map goLHS binds) cl rator (map goExpr rands)
 
         goExpr expr = case expr of
           Obc.Atom atom      -> Obc.Atom (goAtom atom)
           Obc.CallPrim pr ls -> Obc.CallPrim pr (map goAtom ls)
+          Obc.Select x sel   -> Obc.Select (goAtom x) (fmap goAtom sel)
 
         goAtom atom = case atom of
           Obc.Lit c -> Obc.Lit c
