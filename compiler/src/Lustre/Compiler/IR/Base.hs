@@ -4,6 +4,7 @@ module Lustre.Compiler.IR.Base
   , Binder(..), LHS(..), CType(..), Type(..), Clock(..), Atom(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
+  , nodeEnv, allBinders
   , module Language.Lustre.AST
   , module Language.Lustre.Name
   ) where
@@ -18,6 +19,7 @@ import Lustre.Compiler.Monad ( Unique, PassM, newUniq )
 import Data.Text ( Text, pack, unpack )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
+import Data.Map qualified as Map
 
 --------------------------------------------------------------------------------
 
@@ -197,6 +199,13 @@ compNameFromName = compNameFromOrigName . Name.nameOrigName
 compNameFromOrigName :: Name.OrigName -> CompName
 compNameFromOrigName (Name.OrigName uniq mo unqual thing) =
   CompName (fromIntegral uniq) (Name.identText unqual) mo thing
+
+nodeEnv :: BaseNodeDecl eqn ty -> Map.Map CompName ty
+nodeEnv nd =
+  Map.fromList $ map (\(Binder x ty) -> (x,ty)) (allBinders (nodeBinders nd))
+
+allBinders :: NodeBinders ty -> [Binder ty]
+allBinders (NodeBinders ins outs locals) = ins ++ outs ++ locals
 
 --------------------------------------------------------------------------------
 -- Pretty printing

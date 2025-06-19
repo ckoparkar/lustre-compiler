@@ -330,7 +330,7 @@ traversePrg f prg = traverse goDecl prg
     goEqn nd eqn = case eqn of
       Lus.Define lhs rhs ->
         do (rhs1, more) <- f nd rhs
-           pure ((Lus.Define lhs rhs1) : more)
+           pure (more ++ [Lus.Define lhs rhs1])
       _ -> pure [eqn]
 
 foldOnExprs :: (Lus.NodeDecl -> expr -> M (expr, [eqn]))

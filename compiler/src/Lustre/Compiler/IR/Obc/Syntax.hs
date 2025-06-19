@@ -1,10 +1,10 @@
 module Lustre.Compiler.IR.Obc.Syntax
-  ( Program, ClassDecl(..), Method(..), Stmt(..), Expr(..), Atom(..)
+  ( Program, ClassDecl(..), Method(..), Stmt(..), Expr(..), Atom(..), Var(..), LHS(..)
   , module Lustre.Compiler.IR.Base
-  , seqStmts
+  , seqStmts, varCompName
   ) where
 
-import Lustre.Compiler.IR.Base hiding ( Atom(..) )
+import Lustre.Compiler.IR.Base hiding ( Atom(..), LHS(..) )
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
 
@@ -28,32 +28,79 @@ data Method = Method
   deriving Show
 
 data Stmt
-  = Skip                        {-^ Do nothing   -}
-  | Do Stmt Stmt                {-^ Sequencing   -}
-  | If Expr Stmt Stmt           {-^ Conditional  -}
-  | Let (LHS Atom) Expr         {-^ Update       -}
-  | LetState (LHS Atom) Expr    {-^ Update state -}
-  | LetCall                     {-^ Method call  -}
+  = Skip
+    {-^ Do nothing -}
+
+  | Do Stmt Stmt
+    {-^ Sequencing -}
+
+  | If Expr Stmt Stmt
+    {-^ Conditional -}
+
+  | UpdateFields
+      { ufOf      :: LHS Atom
+      , ufUpdates :: [Field Atom]
+      }
+    {-^ Update fields of a struct -}
+
+  | Let (LHS Atom) Expr
+    {-^ Assign local -}
+
+  | LetState (LHS Atom) Expr
+    {-^ Assign state -}
+
+  | LetCopyStruct
+      { lcsTo     :: LHS Atom
+      , lcsFrom   :: Var
+      , lcsTyName :: CompName
+      }
+    {-^ Copy struct -}
+
+  | LetCall
       { lcBinds :: [LHS Atom]
       , lcClass :: (CompName, CompName)
       , lcRator :: CompName
       , lcRands :: [Expr]
       }
+    {- ^ Method call -}
   deriving Show
 
 data Expr
   = Atom Atom
-  | CallPrim PrimNode [Atom] {-^ Primitives -}
+  | CallPrim PrimNode [Atom]
   deriving Show
 
 data Atom
-  = Lit Literal    {-^ Constant   -}
-  | Var CompName   {-^ Read local -}
-  | SVar CompName  {-^ Read state -}
+  = Lit Literal
+  | Var Var
   deriving Show
+
+data Var
+  = State CompName  {-^ State -}
+  | Out CompName    {-^ Output -}
+  | Oth CompName    {-^ Other -}
+  | Addr Var        {-^ Address of -}
+  deriving Show
+
+data LHS e
+  = LVar Var
+  | LSelect (LHS e) (Selector e)
+  deriving Show
+
+instance Functor LHS where
+  fmap f lhs = case lhs of
+    LVar x -> LVar x
+    LSelect lhs1 sel -> LSelect (fmap f lhs1) (fmap f sel)
 
 seqStmts :: [Stmt] -> Stmt
 seqStmts = foldr Do Skip
+
+varCompName :: Var -> CompName
+varCompName v = case v of
+  State x -> x
+  Out x   -> x
+  Oth x   -> x
+  Addr x  -> varCompName x
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -90,9 +137,11 @@ instance Pretty Stmt where
                               , PP.braces (pretty thn)
                               , PP.braces (pretty els)
                               ]
+    UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.vcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
+    LetCopyStruct to from _ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "copy" PP.<+> pretty from PP.<> PP.semi
     Let x rhs -> pretty x PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetState x rhs -> pretty "state" PP.<> PP.parens (pretty x) PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
-    LetCall lhs (cls,ann) f args -> PP.vsep [ pretty lhs PP.<+> PP.equals
+    LetCall lhs (cls,ann) f args -> PP.vsep [ pretty lhs PP.<+> pretty ":="
                                             , PP.indent 4 $
                                               (pretty cls PP.<> PP.parens (pretty ann) PP.<> PP.dot PP.<>
                                                pretty f PP.<> pretty args) PP.<> PP.semi
@@ -109,5 +158,16 @@ instance Pretty Expr where
 instance Pretty Atom where
   pretty atom = case atom of
     Lit c  -> pretty c
-    Var x  -> pretty x
-    SVar x -> pretty "state" PP.<> PP.parens (pretty x)
+    Var v  -> pretty v
+
+instance Pretty Var where
+  pretty v = case v of
+    State x -> pretty "state" PP.<> PP.parens (pretty x)
+    Out x   -> pretty "out" PP.<> PP.parens (pretty x)
+    Oth x   -> pretty x
+    Addr x  -> pretty "addr" PP.<> PP.parens (pretty x)
+
+instance Pretty e => Pretty (LHS e) where
+  pretty lhs = case lhs of
+    LVar x      -> pretty x
+    LSelect l s -> pretty l <> pretty s
