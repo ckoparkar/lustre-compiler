@@ -106,7 +106,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.ERange _ e -> toRHS e
       Lus.Call (Lus.NodeInst fn []) args _clk (Just ctys) ->
         case fn of
-          Lus.CallUser nm     -> NL.Call (NL.compNameFromName nm) (map toAtom args) (map toCType ctys)
+          Lus.CallUser nm     -> NL.Call (NL.compNameFromName nm) (map toExpr args) (map toCType ctys)
           Lus.CallPrim _ prim -> case (prim, args) of
             (Lus.Op2 Lus.Fby, [Lus.Const (Lus.Lit c) _, next]) -> NL.Fby2 c (toExpr next)
             _ -> NL.CExpr (toCExpr expr)
@@ -118,7 +118,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
         case fn of
           Lus.CallUser{} -> bad $ "toCExpr: " ++ show expr
           Lus.CallPrim _ prim -> case (prim, args) of
-            (Lus.ITE, [cnd, thn, els]) -> NL.If (toAtom cnd) (toExpr thn) (toExpr els)
+            (Lus.ITE, [cnd, thn, els]) -> NL.If (toExpr cnd) (toExpr thn) (toExpr els)
             _ -> NL.Expr (toExpr expr)
       _ -> NL.Expr (toExpr expr)
 
@@ -128,16 +128,16 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.Lit{}      -> NL.Atom (toAtom expr)
       Lus.Const{}    -> NL.Atom (toAtom expr)
       Lus.When{}     -> todo expr
-      Lus.Tuple ls   -> NL.Tuple (map toAtom ls)
-      Lus.Array ls   -> NL.Array (map toAtom ls)
+      Lus.Tuple ls   -> NL.Tuple (map toExpr ls)
+      Lus.Array ls   -> NL.Array (map toExpr ls)
       Lus.Select e sel         -> NL.Select (toAtom e) (toSel sel)
-      Lus.Struct nm ls         -> NL.Struct (NL.compNameFromName nm) (map (fmap toAtom) (map toField ls))
+      Lus.Struct nm ls         -> NL.Struct (NL.compNameFromName nm) (map (fmap toExpr) (map toField ls))
       Lus.UpdateStruct Nothing _ _    -> bad $ "toExpr: " ++ show expr
-      Lus.UpdateStruct (Just nm) e ls -> NL.UpdateStruct (NL.compNameFromName nm) (toAtom e) (map (fmap toAtom) (map toField ls))
+      Lus.UpdateStruct (Just nm) e ls -> NL.UpdateStruct (NL.compNameFromName nm) (toAtom e) (map (fmap toExpr) (map toField ls))
       Lus.WithThenElse{}       -> todo expr
       Lus.Merge{}              -> bad $ "toExpr: " ++ show expr
       Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
-        let args1 = map toAtom args in
+        let args1 = map toExpr args in
           case fn of
             Lus.CallUser{}      -> bad $ "UntoExpr: " ++ show expr
             Lus.CallPrim _ prim -> NL.CallPrim prim args1
@@ -153,8 +153,8 @@ toNL decls = NL.Program <$> mapM toDecl decls
 
     toSel sel = case sel of
       Lus.SelectField lbl -> NL.SelectField (Name.labText lbl)
-      Lus.SelectElement e -> NL.SelectElement (toAtom e)
-      Lus.SelectSlice e   -> NL.SelectSlice (fmap toAtom e)
+      Lus.SelectElement e -> NL.SelectElement (toExpr e)
+      Lus.SelectSlice e   -> NL.SelectSlice (fmap toExpr e)
 
 bad :: String -> a
 bad msg = error ("Unexpected " ++ msg)

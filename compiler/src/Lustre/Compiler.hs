@@ -18,6 +18,7 @@ import Lustre.Compiler.Monad            ( PassM, runPassM
                                         , Config(..), mkConfig, dbgPrint )
 import Lustre.Compiler.Options          ( Options(..), parseOptions, usageString )
 import Lustre.Compiler.Passes.Normalize ( normalizeM )
+import Lustre.Compiler.Passes.Simplify  ( simplifyM )
 import Lustre.Compiler.Passes.ToStc     ( toStcM     )
 import Lustre.Compiler.Passes.Schedule  ( scheduleM  )
 import Lustre.Compiler.Passes.ToObc     ( toObcM     )
@@ -56,13 +57,14 @@ compile config fp =
 
 passes :: Config -> [Lus.TopDecl] -> PassM String
 passes _config p0 =
-  do p1 <- pass Identity        (pure . id)   p0
-     p2 <- pass Normalization   normalizeM    p1
-     p3 <- pass ToStc           toStcM        p2
-     p4 <- pass Scheduling      scheduleM     p3
-     p5 <- pass ToObc           toObcM        p4
-     p6 <- pass Codegen         codegenM      p5
-     pure p6
+  do p1    <- pass Identity        (pure . id)   p0
+     p2    <- pass Normalization   normalizeM    p1
+     p3    <- pass Simplify        simplifyM     p2
+     p4    <- pass ToStc           toStcM        p3
+     p5    <- pass Scheduling      scheduleM     p4
+     p6    <- pass ToObc           toObcM        p5
+     p7    <- pass Codegen         codegenM      p6
+     pure p7
 
 pass :: (Pretty b) => Pass -> (a -> PassM b) -> a -> PassM b
 pass name f x =
@@ -83,6 +85,7 @@ passChatterLvl = 3
 data Pass
   = Identity
   | Normalization
+  | Simplify
   | ToStc
   | Scheduling
   | ToObc

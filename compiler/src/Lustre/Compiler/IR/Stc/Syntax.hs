@@ -18,20 +18,20 @@ data SystemDecl = SystemDecl
   { sysName      :: CompName
   , sysBinders   :: NodeBinders CType
   , sysTcs       :: [Tc]
-  , sysInits     :: [(LHS Atom, Literal)]
+  , sysInits     :: [(LHS Expr, Literal)]
   , sysInstances :: [(CompName, CompName)]
   }
   deriving Show
 
 -- | Transition constraints.
 data Tc
-  = Define (LHS Atom) Clock CExpr  {-^ Basic -}
-  | Next (LHS Atom) Clock Expr     {-^ Next  -}
+  = Define (LHS Expr) Clock CExpr  {-^ Basic -}
+  | Next (LHS Expr) Clock Expr     {-^ Next  -}
   | Call                           {-^ Function call -}
-      { cBinds :: [LHS Atom]
+      { cBinds :: [LHS Expr]
       , cClk   :: Clock
       , cName  :: CompName
-      , cArgs  :: [Atom]
+      , cArgs  :: [Expr]
       , cAnn   :: (CompName, Bool)
       }
   deriving Show

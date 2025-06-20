@@ -27,9 +27,10 @@ library
                       Lustre.Compiler.IR.Stc.Syntax
                       Lustre.Compiler.IR.Obc.Syntax
                       Lustre.Compiler.Passes.Normalize
+                      Lustre.Compiler.Passes.Simplify
                       Lustre.Compiler.Passes.ToStc
-                      Lustre.Compiler.Passes.ToObc
                       Lustre.Compiler.Passes.Schedule
+                      Lustre.Compiler.Passes.ToObc
                       Lustre.Compiler.Passes.Codegen
     build-depends:    language-lustre
                     , text

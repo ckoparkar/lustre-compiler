@@ -107,7 +107,7 @@ cgStmt = go
 
       UpdateFields lhs updates ->
         map (\(Field lbl val) ->
-              [C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgAtom val); |])
+              [C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgExpr val); |])
             updates
 
       Let lhs expr ->
@@ -130,7 +130,7 @@ cgStmt = go
                       map cgLHS lcBinds
         in [[C.cstm| $id:mname($args:args); |]]
 
-cgLHS :: LHS Atom -> C.Exp
+cgLHS :: LHS Expr -> C.Exp
 cgLHS lhs = case lhs of
   LVar v    -> cgVar v
   LSelect{} -> todo lhs
@@ -140,7 +140,7 @@ cgExpr = go
   where
     go expr = case expr of
       Atom atom         -> cgAtom atom
-      CallPrim pr ls    -> cgPrimApp pr (map cgAtom ls)
+      CallPrim pr ls    -> cgPrimApp pr (map cgExpr ls)
       Select e s        -> case s of
                              SelectField f -> [C.cexp| $exp:(cgAtom e).$id:f |]
                              _ -> todo s

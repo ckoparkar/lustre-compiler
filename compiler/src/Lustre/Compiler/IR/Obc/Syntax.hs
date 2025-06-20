@@ -38,31 +38,31 @@ data Stmt
     {-^ Conditional -}
 
   | UpdateFields
-      { ufOf      :: LHS Atom
-      , ufUpdates :: [Field Atom]
+      { ufOf      :: LHS Expr
+      , ufUpdates :: [Field Expr]
       }
     {-^ Update fields of a struct -}
 
-  | Let (LHS Atom) Expr
+  | Let (LHS Expr) Expr
     {-^ Assign local -}
 
-  | LetState (LHS Atom) Expr
+  | LetState (LHS Expr) Expr
     {-^ Assign state -}
 
   | LetCopyStruct
-      { lcsTo     :: LHS Atom
+      { lcsTo     :: LHS Expr
       , lcsFrom   :: Var
       , lcsTyName :: CompName
       }
     {-^ Copy struct -}
 
   | LetAllocStruct
-      { lasTo     :: LHS Atom
+      { lasTo     :: LHS Expr
       , lasTyName :: CompName
       }
 
   | LetCall
-      { lcBinds :: [LHS Atom]
+      { lcBinds :: [LHS Expr]
       , lcClass :: (CompName, CompName)
       , lcRator :: CompName
       , lcRands :: [Expr]
@@ -72,8 +72,8 @@ data Stmt
 
 data Expr
   = Atom Atom
-  | CallPrim PrimNode [Atom]
-  | Select Atom (Selector Atom)
+  | CallPrim PrimNode [Expr]
+  | Select Atom (Selector Expr)
   deriving Show
 
 data Atom

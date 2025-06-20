@@ -5,6 +5,7 @@ module Lustre.Compiler.IR.Base
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
   , nodeEnv, allBinders
+  , FreeVars(..)
   , module Language.Lustre.AST
   , module Language.Lustre.Name
   ) where
@@ -20,6 +21,7 @@ import Data.Text ( Text, pack, unpack )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 import Data.Map qualified as Map
+import Data.Set qualified as Set
 
 --------------------------------------------------------------------------------
 
@@ -218,6 +220,44 @@ nodeEnv nd =
 
 allBinders :: NodeBinders ty -> [Binder ty]
 allBinders (NodeBinders ins outs locals) = ins ++ outs ++ locals
+
+--------------------------------------------------------------------------------
+
+class FreeVars a where
+  freeVars :: a -> Set.Set CompName
+
+instance FreeVars e => FreeVars (ArraySlice e) where
+  freeVars (ArraySlice start end step) =
+    freeVars start <> freeVars end <> (case step of
+                                         Nothing -> Set.empty
+                                         Just s  -> freeVars s)
+
+instance FreeVars e => FreeVars (Selector e) where
+  freeVars sel = case sel of
+    SelectField{}   -> Set.empty
+    SelectElement e -> freeVars e
+    SelectSlice s   -> freeVars s
+
+instance FreeVars e => FreeVars (LHS e) where
+  freeVars lhs = case lhs of
+    LVar x        -> Set.singleton x
+    LSelect x sel -> freeVars x <> freeVars sel
+
+instance FreeVars CType where
+  freeVars (CType _ clk) = freeVars clk
+
+instance FreeVars Clock where
+  freeVars clk = case clk of
+    BaseClock  -> Set.empty
+    WhenTrue a -> freeVars a
+
+instance FreeVars Atom where
+  freeVars a = case a of
+    Lit _ ty -> freeVars ty
+    Var x    -> Set.singleton x
+
+instance FreeVars e => FreeVars (Field e) where
+  freeVars (Field _ e) = freeVars e
 
 --------------------------------------------------------------------------------
 -- Pretty printing

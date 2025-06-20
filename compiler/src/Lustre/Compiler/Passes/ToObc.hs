@@ -64,25 +64,25 @@ tcToStmt tc = case tc of
     ctrl clk (Obc.LetCall (map toObcLHS binds)
                           (name, ann)
                           fnStep
-                          (map (Obc.Atom . toObcAtom) args))
+                          (map toObcExpr args))
 
 ctrl :: Stc.Clock -> Obc.Stmt -> Obc.Stmt
 ctrl clk stmt = case clk of
   BaseClock  -> stmt
   WhenTrue x -> Obc.If (Obc.Atom (toObcAtom x)) stmt Obc.Skip
 
-cExprToStmt :: Stc.LHS Stc.Atom -> Stc.CExpr -> Obc.Stmt
+cExprToStmt :: Stc.LHS Stc.Expr -> Stc.CExpr -> Obc.Stmt
 cExprToStmt x cexpr = case cexpr of
   Stc.Expr e ->
     case e of
       Stc.UpdateStruct tyName from updates ->
         Obc.Do
           (Obc.LetCopyStruct (toObcLHS x) (toVar from) tyName)
-          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcAtom) updates))
+          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates))
       Stc.Struct tyName updates ->
         Obc.Do
           (Obc.LetAllocStruct (toObcLHS x) tyName)
-          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcAtom) updates))
+          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates))
       _oth ->
         Obc.Let (toObcLHS x) (toObcExpr e)
   oth -> todo oth
@@ -94,8 +94,8 @@ cExprToStmt x cexpr = case cexpr of
 toObcExpr :: Stc.Expr -> Obc.Expr
 toObcExpr expr = case expr of
   Stc.Atom atom      -> Obc.Atom (toObcAtom atom)
-  Stc.CallPrim pr ls -> Obc.CallPrim pr (map toObcAtom ls)
-  Stc.Select x sel   -> Obc.Select (toObcAtom x) (fmap toObcAtom sel)
+  Stc.CallPrim pr ls -> Obc.CallPrim pr (map toObcExpr ls)
+  Stc.Select x sel   -> Obc.Select (toObcAtom x) (fmap toObcExpr sel)
   _ -> error $ show expr
 
 toObcAtom :: Stc.Atom -> Obc.Atom
@@ -103,10 +103,10 @@ toObcAtom atom = case atom of
   Stc.Lit c _ -> Obc.Lit c
   Stc.Var x   -> Obc.Var (Obc.Oth x)
 
-toObcLHS :: Stc.LHS Atom -> Obc.LHS Obc.Atom
+toObcLHS :: Stc.LHS Stc.Expr -> Obc.LHS Obc.Expr
 toObcLHS lhs = case lhs of
   Stc.LVar x      -> Obc.LVar (Obc.Oth x)
-  Stc.LSelect l s -> Obc.LSelect (toObcLHS l) (fmap toObcAtom s)
+  Stc.LSelect l s -> Obc.LSelect (toObcLHS l) (fmap toObcExpr s)
 
 --------------------------------------------------------------------------------
 
@@ -132,8 +132,8 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
 
         goExpr expr = case expr of
           Obc.Atom atom      -> Obc.Atom (goAtom atom)
-          Obc.CallPrim pr ls -> Obc.CallPrim pr (map goAtom ls)
-          Obc.Select x sel   -> Obc.Select (goAtom x) (fmap goAtom sel)
+          Obc.CallPrim pr ls -> Obc.CallPrim pr (map goExpr ls)
+          Obc.Select x sel   -> Obc.Select (goAtom x) (fmap goExpr sel)
 
         goAtom atom = case atom of
           Obc.Lit c -> Obc.Lit c
@@ -147,15 +147,15 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
 
           _ -> bad (show x)
 
-        goField (Obc.Field fname fval) = Obc.Field fname (goAtom fval)
+        goField (Obc.Field fname fval) = Obc.Field fname (goExpr fval)
 
         goLHS lhs = case lhs of
           Obc.LVar v      -> Obc.LVar (goVar v)
-          Obc.LSelect l s -> Obc.LSelect (goLHS l) (fmap goAtom s)
+          Obc.LSelect l s -> Obc.LSelect (goLHS l) (fmap goExpr s)
 
         goAddrOf lhs = case lhs of
           Obc.LVar v -> Obc.LVar (Obc.Addr v)
-          Obc.LSelect l s -> Obc.LSelect (goAddrOf l) (fmap goAtom s)
+          Obc.LSelect l s -> Obc.LSelect (goAddrOf l) (fmap goExpr s)
 
 
 explicitCopies :: Obc.ClassDecl -> Obc.ClassDecl
