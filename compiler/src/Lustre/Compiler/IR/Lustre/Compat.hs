@@ -90,7 +90,7 @@ instance Functor ArraySlice where
 freshIdent :: MonadGen Unique m => m Ident
 freshIdent =
   do i <- newUniq
-     let txt    = pack "x"
+     let txt    = pack "_x"
          lbl    = Label txt (SourceRange (startPos txt) (startPos txt))
          unqual = Ident lbl Nothing
          orig   = OrigName (fromInteger i) Nothing unqual AVal

@@ -85,6 +85,9 @@ cExprToStmt x cexpr = case cexpr of
           (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates))
       _oth ->
         Obc.Let (toObcLHS x) (toObcExpr e)
+  Stc.If cnd thn els ->
+    let x1 = (toObcLHS x) in
+      Obc.If (toObcExpr cnd) (Obc.Let x1 (toObcExpr thn)) (Obc.Let x1 (toObcExpr els))
   oth -> todo oth
   where
     toVar from = case from of
