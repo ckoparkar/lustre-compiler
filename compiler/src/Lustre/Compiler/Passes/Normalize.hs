@@ -174,6 +174,9 @@ toNode enumConMap nd =
     toAtom expr = case expr of
       Lus.Var x      -> NL.Var (NL.compNameFromName x)
       Lus.Const c ty -> NL.Lit (toLit enumConMap c) (toCType ty)
+      Lus.Lit c      -> case typeOf [] nd expr of
+                          [ty] ->  NL.Lit (toLit enumConMap expr) (toCType ty)
+                          oth  -> bad $ "toAtom: type of literal, " ++ show oth
       _ -> bad $ "toAtom: " ++ show expr
 
     toSel sel = case sel of

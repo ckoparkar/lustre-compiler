@@ -1,9 +1,11 @@
 module Lustre.Compiler.IR.Stc.Syntax
   ( Program, SystemDecl(..), Tc(..)
+  , bindsOfTc
   , module Lustre.Compiler.IR.NLustre.Syntax
   , module Lustre.Compiler.IR.Base
   ) where
 
+import Data.Set qualified as Set
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
 
@@ -36,6 +38,18 @@ data Tc
       , cAnn   :: (CompName, Bool)
       }
   deriving Show
+
+bindsOfTc :: Tc -> [LHS Expr]
+bindsOfTc tc = case tc of
+  Define lhs _ _ -> [lhs]
+  Next lhs _ _   -> [lhs]
+  Call{cBinds}   -> cBinds
+
+instance FreeVars Tc where
+  freeVars tc = case tc of
+    Define _ clk ce  -> freeVars clk <> freeVars ce
+    Next _ clk e     -> freeVars clk <> freeVars e
+    Call{cClk,cArgs} -> freeVars cClk <> Set.unions (map freeVars cArgs)
 
 --------------------------------------------------------------------------------
 -- Pretty printing

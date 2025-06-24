@@ -55,7 +55,7 @@ codegenM :: Program -> PassM CParts
 codegenM (Program decls) =
   do (CParts hdr fns) <- fold <$> runM (mapM go decls) namedTypes
      let hdr1 = intersperse "\n\n" (stdIncludes : hdr)
-         fns1 = intersperse "\n\n" fns
+         fns1 = intersperse "\n\n" ("\n\n" : fns)
      pure (CParts hdr1 fns1)
   where
     go d = case d of

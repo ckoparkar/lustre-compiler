@@ -1,0 +1,11 @@
+node g(x: real) returns (y: real);
+let
+  y = x;
+tel
+
+node f(x: real) returns (y: real);
+var z : real;
+let
+  y = z;
+  z = g(x);
+tel
