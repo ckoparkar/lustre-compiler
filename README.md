@@ -13,6 +13,17 @@ References:
 This project is written in Haskell and thus depends on GHC and Cabal
 which can be installed using [GHCup](https://www.haskell.org/ghcup/).
 
+### Usage
+
+After cloning this repository you can run:
+
+```
+$ git submodule update --init
+$ cabal v2-build all
+$ cabal v2-exec lustre-compiler -- -v3 --prog=examples/test2.lus --log=dbg.log
+Writing logs to HOME/lustre-compiler/dbg.log.
+Writing C code to HOME/lustre-compiler/examples/test2.lus.compiled/test2.c.
+```
 
 ### License
 
