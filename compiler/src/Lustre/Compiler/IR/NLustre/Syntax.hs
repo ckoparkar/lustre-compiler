@@ -2,6 +2,7 @@ module Lustre.Compiler.IR.NLustre.Syntax
   ( Program, NodeDecl
   , Equation(..), RHS(..)
   , CExpr(..), Expr(..), Atom(..)
+  , Clock(..), CType(..)
   , module Lustre.Compiler.IR.Base
   ) where
 
@@ -55,6 +56,21 @@ data Expr
     {-^ Subsampling -}
   deriving Show
 
+-- | Atomic expressions.
+data Atom
+  = Lit Literal CType  {-^ Constant   -}
+  | Var CompName       {-^ Variable   -}
+  deriving Show
+
+-- | A boolean clock.  The base clock is always @true@.
+data Clock = BaseClock
+           | WhenEq Atom Atom
+  deriving Show
+
+-- | Type on a boolean clock.
+data CType = CType { cType :: Type, cClock :: Clock }
+  deriving Show
+
 --------------------------------------------------------------------------------
 
 instance FreeVars RHS where
@@ -76,9 +92,22 @@ instance FreeVars Expr where
     Select a sel        -> freeVars a <> freeVars sel
     Tuple ls            -> Set.unions (map freeVars ls)
     Array ls            -> Set.unions (map freeVars ls)
-    Struct x ls         -> Set.unions (map freeVars ls)
-    UpdateStruct x a ls -> freeVars a <> Set.unions (map freeVars ls)
+    Struct _ ls         -> Set.unions (map freeVars ls)
+    UpdateStruct _ a ls -> freeVars a <> Set.unions (map freeVars ls)
     When e1 e2          -> freeVars e1 <> freeVars e2
+
+instance FreeVars CType where
+  freeVars (CType _ clk) = freeVars clk
+
+instance FreeVars Clock where
+  freeVars clk = case clk of
+    BaseClock  -> Set.empty
+    WhenEq a b -> freeVars a <> freeVars b
+
+instance FreeVars Atom where
+  freeVars a = case a of
+    Lit _ ty -> freeVars ty
+    Var x    -> Set.singleton x
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -100,7 +129,11 @@ instance Pretty RHS where
 instance Pretty CExpr where
   pretty cexpr = case cexpr of
     Expr e -> pretty e
-    Merge{} -> pretty (show cexpr)
+    Merge (a, ty) bs ->
+      pretty "merge" PP.<+> pretty a PP.<> PP.line PP.<> PP.indent 4 (PP.vcat (ppBranch <$> bs))
+      where
+        ppBranch (lit, body) =
+          pretty (Lit lit ty) PP.<+> pretty "=>" PP.<+> pretty body
     If cnd thn els  -> PP.vsep [ pretty "if" PP.<+> pretty cnd, pretty thn, pretty els ]
 
 instance Pretty Expr where
@@ -116,3 +149,18 @@ instance Pretty Expr where
                                  PP.align (PP.vcat (PP.punctuate PP.semi (map pretty fs))))
     When e b    -> pretty e PP.<+> pretty "when" PP.<+> pretty b
   prettyList exprs = PP.tupled (map pretty exprs)
+
+instance Pretty CType where
+  pretty (CType ty clk) = case clk of
+    BaseClock  -> pretty ty
+    WhenEq n l -> pretty n PP.<+> pretty "=" PP.<+> pretty l
+
+instance Pretty Clock where
+  pretty clk = case clk of
+    BaseClock  -> pretty "base"
+    WhenEq n l -> pretty "wheneq" PP.<+> PP.parens (PP.hsep [pretty n, pretty l])
+
+instance Pretty Atom where
+  pretty atom = case atom of
+    Lit c ty -> pretty c PP.<> pretty ":" PP.<> pretty ty
+    Var nm   -> pretty nm

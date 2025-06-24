@@ -1,0 +1,14 @@
+type T = struct { x : int; y : bool };
+
+function f (x : T) returns (y : int)
+let
+  --%MAIN;
+  y = if x.y then x.x else 0;
+tel
+
+function main () returns (y : int)
+var z : T;
+let
+  z = T { x = 0; y = true };
+  y = f (z);
+tel

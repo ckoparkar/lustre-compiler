@@ -7,7 +7,8 @@ module Lustre.Compiler.IR.Stc.Syntax
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
 
-import Lustre.Compiler.IR.NLustre.Syntax ( CExpr(..), Expr(..), Atom(..) )
+import Lustre.Compiler.IR.NLustre.Syntax ( CExpr(..), Expr(..), Atom(..)
+                                         , CType(..), Clock(..) )
 import Lustre.Compiler.IR.Base
 
 --------------------------------------------------------------------------------

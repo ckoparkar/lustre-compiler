@@ -4,7 +4,7 @@ module Lustre.Compiler.IR.Obc.Syntax
   , seqStmts, varCompName
   ) where
 
-import Lustre.Compiler.IR.Base hiding ( Atom(..), LHS(..) )
+import Lustre.Compiler.IR.Base hiding ( LHS(..) )
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
 
@@ -36,6 +36,8 @@ data Stmt
 
   | If Expr Stmt Stmt
     {-^ Conditional -}
+
+  | Switch Expr [(Literal, Stmt)]
 
   | UpdateFields
       { ufOf      :: LHS Expr
@@ -139,10 +141,15 @@ instance Pretty Stmt where
   pretty stmt = case stmt of
     Skip -> PP.emptyDoc
     Do s1 s2 -> PP.vsep [ pretty s1, pretty s2 ]
-    If cnd thn els -> PP.vsep [ pretty "if" PP.<+> PP.parens (pretty cnd) PP.<+> PP.lbrace
+    If cnd thn els -> PP.vsep [ pretty "if" PP.<+> PP.parens (pretty cnd)
                               , PP.braces (pretty thn)
                               , PP.braces (pretty els)
                               ]
+    Switch cnd ls -> PP.vsep [ pretty "switch" PP.<+> PP.parens (pretty cnd) PP.<+> PP.lbrace
+                             , PP.indent 4 (PP.vcat (map (\(c,e) -> pretty c PP.<+> pretty "=>" PP.<+>
+                                                                    pretty e) ls))
+                             , PP.rbrace
+                             ]
     UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.hcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
     LetCopyStruct to from _ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "copy" PP.<+> pretty from PP.<> PP.semi
     LetAllocStruct to ty -> pretty ty PP.<+> pretty to PP.<> PP.semi
@@ -150,7 +157,7 @@ instance Pretty Stmt where
     LetState x rhs -> pretty "state" PP.<> PP.parens (pretty x) PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetCall lhs (cls,ann) f args -> PP.vsep [ pretty lhs PP.<+> pretty ":="
                                             , PP.indent 4 $
-                                              (pretty cls PP.<> PP.parens (pretty ann) PP.<> PP.dot PP.<>
+                                              (pretty cls PP.<> PP.angles (pretty ann) PP.<> PP.dot PP.<>
                                                pretty f PP.<> pretty args) PP.<> PP.semi
                                             ]
 

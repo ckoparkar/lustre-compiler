@@ -1,0 +1,27 @@
+type move = enum { Rock, Paper, Scissor };
+
+node f(
+  clk : move;
+  i1 : int when Rock(clk);
+  i2 : int when Paper(clk);
+  i3 : int when Scissor(clk);
+  ) returns (y : int)
+let
+  y = merge clk
+        ( Rock -> i1 )
+        ( Paper -> i2 )
+        ( Scissor -> i3 );
+tel
+
+node g() returns (y : move)
+let
+  y = Rock;
+tel
+
+node main(i1, i2, i3 : int; clk : move) returns (y : int);
+let
+  y = f (clk,
+         i1 when Rock(clk),
+         i2 when Paper(clk),
+         i3 when Scissor(clk));
+tel

@@ -1,7 +1,7 @@
 module Lustre.Compiler.IR.Base
   ( BaseProgram(..), BaseTopDecl(..), BaseNodeDecl(..), BaseEqnGroup(..)
   , TypeDecl(..), TypeDef(..), FieldType(..), Selector(..), ConstDef(..), NodeBinders(..)
-  , Binder(..), LHS(..), CType(..), Type(..), Clock(..), Atom(..), Field(..)
+  , Binder(..), LHS(..), Type(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
   , nodeEnv, allBinders
@@ -52,9 +52,12 @@ data TypeDecl = TypeDecl
   } deriving Show
 
 -- | A definition for a named type.
-data TypeDef = IsType !Type             -- ^ A type alias.
-             | IsEnum ![ CompName ]     -- ^ An enumeration type.
-             | IsStruct ![ FieldType ]  -- ^ A record type.
+data TypeDef = IsType !Type
+               -- ^ A type alias.
+             | IsEnum ![ (CompName, Integer) ]
+               -- ^ An enumeration type.
+             | IsStruct ![ FieldType ]
+               -- ^ A record type.
               deriving Show
 
 -- | The type of the field of a structure.
@@ -145,10 +148,6 @@ instance Functor LHS where
     LVar x -> LVar x
     LSelect lhs1 sel -> LSelect (fmap f lhs1) (fmap f sel)
 
--- | Type on a boolean clock.
-data CType = CType { cType :: Type, cClock :: Clock }
-  deriving Show
-
 -- | The type of value or a constant.
 data Type
   = IntType     -- ^ Type of integers.
@@ -164,16 +163,6 @@ data Type
   | IntSubrange Integer Integer
     -- ^ An interval subset of the integers.  The 'e's are bounds.
     -- Their values are included in the interval.
-  deriving Show
-
--- | A boolean clock.  The base clock is always @true@.
-data Clock = BaseClock | WhenTrue Atom
-  deriving Show
-
--- | Atomic expressions.
-data Atom
-  = Lit Literal CType  {-^ Constant   -}
-  | Var CompName       {-^ Variable   -}
   deriving Show
 
 data Field e = Field { fName :: Text, fValue :: e }
@@ -214,6 +203,8 @@ compNameFromOrigName :: Name.OrigName -> CompName
 compNameFromOrigName (Name.OrigName uniq mo unqual thing) =
   CompName (fromIntegral uniq) (Name.identText unqual) mo thing
 
+--------------------------------------------------------------------------------
+
 nodeEnv :: BaseNodeDecl eqn ty -> Map.Map CompName ty
 nodeEnv nd =
   Map.fromList $ map (\(Binder x ty) -> (x,ty)) (allBinders (nodeBinders nd))
@@ -242,19 +233,6 @@ instance FreeVars e => FreeVars (LHS e) where
   freeVars lhs = case lhs of
     LVar x        -> Set.singleton x
     LSelect x sel -> freeVars x <> freeVars sel
-
-instance FreeVars CType where
-  freeVars (CType _ clk) = freeVars clk
-
-instance FreeVars Clock where
-  freeVars clk = case clk of
-    BaseClock  -> Set.empty
-    WhenTrue a -> freeVars a
-
-instance FreeVars Atom where
-  freeVars a = case a of
-    Lit _ ty -> freeVars ty
-    Var x    -> Set.singleton x
 
 instance FreeVars e => FreeVars (Field e) where
   freeVars (Field _ e) = freeVars e
@@ -292,7 +270,8 @@ instance Pretty TypeDef where
   pretty td =
     case td of
       IsType t    -> pretty t
-      IsEnum is   -> pretty "enum" PP.<+> PP.braces (PP.hsep (PP.punctuate PP.comma (map pretty is)))
+      IsEnum is   -> pretty "enum" PP.<+>
+                     PP.braces (PP.hsep (PP.punctuate PP.comma (map (\(k,i) -> pretty k PP.<+> pretty "=" PP.<+> pretty i) is)))
       IsStruct fs -> PP.braces (PP.hcat (PP.punctuate (PP.semi PP.<> PP.space) (map pretty fs)))
 
 instance Pretty FieldType where
@@ -331,11 +310,6 @@ instance Pretty e => Pretty (LHS e) where
     LVar x      -> pretty x
     LSelect l s -> pretty l <> pretty s
 
-instance Pretty CType where
-  pretty (CType ty clk) = case clk of
-    BaseClock  -> pretty ty
-    WhenTrue a -> pretty ty PP.<+> pretty "when" PP.<+> pretty a
-
 instance Pretty Type where
   pretty ty = case ty of
     NamedType x       -> pretty x
@@ -346,16 +320,6 @@ instance Pretty Type where
     IntSubrange e1 e2 ->
       pretty "subrange" PP.<+> PP.brackets (PP.hsep (PP.punctuate PP.comma (map pretty [e1,e2]))) PP.<+>
       pretty "of" PP.<+> pretty "int"
-
-instance Pretty Clock where
-  pretty clk = case clk of
-    BaseClock  -> pretty "base"
-    WhenTrue a -> pretty "when" PP.<+> pretty a
-
-instance Pretty Atom where
-  pretty atom = case atom of
-    Lit c ty -> pretty c PP.<> pretty ":" PP.<> pretty ty
-    Var nm   -> pretty nm
 
 instance Pretty e => Pretty (Field e) where
   pretty (Field x e) = pretty x PP.<+> pretty "=" PP.<+> pretty e

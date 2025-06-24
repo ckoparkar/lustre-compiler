@@ -1,0 +1,21 @@
+node nats() returns (n : int);
+let
+  n = 0 fby (1 + n);
+tel
+
+node f() returns (y : int);
+  var c : bool;
+  var x : int when c;
+  var z : int when not c;
+let
+  c = true fby (not c);
+  x = nats () when c;
+  z = 0 when not c;
+  y = merge c (true -> x) (false -> z);
+tel
+
+node main(puase : int) returns (y : int);
+let
+  --%MAIN;
+  y = nats();
+tel

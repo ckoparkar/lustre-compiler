@@ -24,13 +24,14 @@ class TypeOf a where
 instance TypeOf Expression where
   typeOf tyDecls nd expr = case expr of
     ERange _ e -> typeOf tyDecls nd e
-    Var x      -> [(nodeEnv nd) Map.! (origNameToIdent (nameOrigName x))]
+    Var x      -> [lookupLocalName x]
     Lit c      -> case c of
                     Int{}  -> [CType IntType BaseClock]
                     Real{} -> [CType RealType BaseClock]
                     Bool{} -> [CType BoolType BaseClock]
     Const _ ty -> [ty]
-    -- e `When` clk ->
+    e `When` c -> let tys = typeOf tyDecls nd e
+                  in map (\ty -> ty { cClock =  KnownClock c }) tys
     -- Tuple{} ->
     -- Array{} ->
     Select e s  ->
@@ -46,7 +47,10 @@ instance TypeOf Expression where
     Struct nm _ -> [CType (NamedType nm) BaseClock]
     UpdateStruct (Just nm) _ _ -> [CType (NamedType nm) BaseClock]
     -- WithThenElse{} ->
-    -- Merge{}
+    Merge clk alts -> let clkclk = cClock (lookupLocalIdent clk)
+                          MergeCase _ rhs = (head alts)
+                          tys = typeOf tyDecls nd rhs
+                      in map (\cty -> cty { cClock = clkclk } ) tys
     Call _ _ _ mbTys -> case mbTys of
                           Nothing  -> []
                           Just tys -> tys
@@ -63,9 +67,13 @@ instance TypeOf Expression where
                                          IsEnum e     -> bad $ "Enum " ++ show e
 
       nameToIdent = Name.origNameToIdent . Name.nameOrigName
+
       nodeEnv nd0 =
         let (ins, outs, locals) = nodeBinders nd0
         in Map.fromList $ map (\(Binder x ty) -> (x,ty)) (ins ++ outs ++ locals)
+
+      lookupLocalName x = (nodeEnv nd) Map.! (origNameToIdent (nameOrigName x))
+      lookupLocalIdent x = (nodeEnv nd) Map.! x
 
 bad :: String -> a
 bad msg = error ("Unexpected " ++ msg)

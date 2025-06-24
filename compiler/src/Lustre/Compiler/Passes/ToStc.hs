@@ -42,8 +42,8 @@ eqnToTc :: Map.Map NL.CompName NL.CType -> NL.Equation -> [Stc.Tc]
 eqnToTc env (NL.Define lhs rhs) = case (lhs, rhs) of
   ([x], NL.CExpr cexpr)  -> [ Stc.Define x (clockOf x) cexpr ]
   ([x], NL.Fby2 _ expr)  -> [ Stc.Next x (clockOf x) expr ]
-  (xs, NL.Call f args _) -> [ Stc.Call { Stc.cBinds = xs
-                                       , Stc.cClk   = undefined
+  (xs, NL.Call f args t) -> [ Stc.Call { Stc.cBinds = xs
+                                       , Stc.cClk   = (Stc.cClock (head t))
                                        , Stc.cName  = f
                                        , Stc.cArgs  = args
                                        , Stc.cAnn   = (var (head xs), False)

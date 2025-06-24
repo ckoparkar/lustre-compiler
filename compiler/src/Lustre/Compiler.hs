@@ -1,5 +1,4 @@
-module Lustre.Compiler where
-
+module Lustre.Compiler ( compileCmd )  where
 
 import Language.Lustre.Parser               ( parseProgramFromFileLatin1 )
 import Language.Lustre.Transform.OrderDecls (quickOrderTopDecl)
@@ -22,7 +21,7 @@ import Lustre.Compiler.Passes.Simplify  ( simplifyM )
 import Lustre.Compiler.Passes.ToStc     ( toStcM     )
 import Lustre.Compiler.Passes.Schedule  ( scheduleM  )
 import Lustre.Compiler.Passes.ToObc     ( toObcM     )
-import Lustre.Compiler.Passes.Codegen   ( codegenM   )
+import Lustre.Compiler.Passes.Codegen   ( codegenM, CParts(..) )
 
 --------------------------------------------------------------------------------
 
@@ -45,17 +44,17 @@ compile config fp =
      case mbCompiled of
        Left err ->
          error (show err)
-       Right cCode ->
+       Right (CParts hdr fns) ->
          do let baseName  = takeBaseName fpAbs
                 cDir      = addExtension fpAbs "compiled"
                 cFile     = cDir </> baseName <.> ".c"
             Dir.createDirectoryIfMissing True cDir
             wipeDirectory cDir
-            writeFile cFile cCode
+            writeFile cFile (concat (hdr ++ fns))
             let msg = "Writing C code to " ++ cFile ++ "."
             putStrLn msg
 
-passes :: Config -> [Lus.TopDecl] -> PassM String
+passes :: Config -> [Lus.TopDecl] -> PassM CParts
 passes _config p0 =
   do p1    <- pass Identity        (pure . id)   p0
      p2    <- pass Normalization   normalizeM    p1

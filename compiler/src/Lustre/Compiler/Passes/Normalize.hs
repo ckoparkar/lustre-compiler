@@ -5,11 +5,14 @@ import Language.Lustre.AST qualified as Lus
 import Language.Lustre.Name qualified as Name
 import Control.Monad.State qualified as St
 import Control.Monad ( foldM )
+import Data.Map qualified as Map
 
 import Lustre.Compiler.IR.Lustre.Compat
 import Lustre.Compiler.IR.NLustre qualified as NL
 import Lustre.Compiler.Monad
 import Lustre.Utils ( todo )
+
+import GHC.Stack ( HasCallStack )
 
 --------------------------------------------------------------------------------
 
@@ -28,42 +31,33 @@ toNL decls = NL.Program <$> mapM toDecl decls
     toDecl decl = case decl of
       Lus.DeclareType tydecl -> pure (NL.DeclareType (toTypeDecl tydecl))
       Lus.DeclareConst cdecl -> pure (NL.DeclareConst (toConstDef cdecl))
-      Lus.DeclareNode ndecl  -> pure (NL.DeclareNode $ toNode ndecl)
+      Lus.DeclareNode ndecl  -> pure (NL.DeclareNode (toNode enumConMap ndecl))
       Lus.DeclareNodeInst{}  -> reportError (Other "normalize: bad DeclareNodeInst")
       Lus.DeclareContract{}  -> reportError (Other "normalize: bad DeclareContract")
-
-    toNode nd =
-      let eqns = case Lus.nodeDef nd of
-                   Nothing -> []
-                   Just (Lus.NodeBody _ eqs) -> concatMap toEqn eqs
-          (ins, outs, locals) = nodeBinders nd
-      in NL.NodeDecl (NL.compNameFromIdent (Lus.nodeName nd))
-                     (NL.NodeBinders (map toBinder ins)
-                                     (map toBinder outs)
-                                     (map toBinder locals))
-                     eqns
 
     toTypeDecl (Lus.TypeDecl nm def) =
       NL.TypeDecl (NL.compNameFromIdent nm) (fmap toTypeDef def)
 
     toTypeDef tydef = case tydef of
       Lus.IsType ty   -> NL.IsType (toType ty)
-      Lus.IsEnum ls   -> NL.IsEnum (map NL.compNameFromIdent ls)
+      Lus.IsEnum ls   -> NL.IsEnum (map (\i -> let x = NL.compNameFromIdent i
+                                               in (x, enumConMap Map.! x))
+                                        ls)
       Lus.IsStruct ls -> NL.IsStruct (map toFieldType ls)
 
     toFieldType (Lus.FieldType nm ty e) =
-      NL.FieldType (Name.labText nm) (toType ty) (fmap toLit e)
+      NL.FieldType (Name.labText nm) (toType ty) (fmap (toLit enumConMap) e)
 
     toConstDef (Lus.ConstDef nm ty e) =
-      NL.ConstDef (NL.compNameFromIdent nm) (fmap toType ty) (fmap toLit e)
+      NL.ConstDef (NL.compNameFromIdent nm) (fmap toType ty) (fmap (toLit enumConMap) e)
 
-    toBinder (Lus.Binder x ty) =
-      NL.Binder (NL.compNameFromIdent x) (toCType ty)
+    enumConMap = foldr (\is acc -> Map.fromList (zip is [0..]) <> acc) Map.empty enums
 
-    toCType (Lus.CType ty clk) =
-      NL.CType (toType ty) (toClock clk)
+    enums = [ map NL.compNameFromIdent is |
+              Lus.TypeDecl { Lus.typeDef = Just (Lus.IsEnum is) } <- (typeDecls decls) ]
 
-    toType ty = case ty of
+toType :: Lus.Type -> NL.Type
+toType ty = case ty of
       Lus.TypeRange _ ty1   -> toType ty1
       Lus.IntType           -> NL.IntType
       Lus.RealType          -> NL.RealType
@@ -75,24 +69,43 @@ toNL decls = NL.Program <$> mapM toDecl decls
           (Lus.Lit (Lus.Int i1), Lus.Lit (Lus.Int i2)) -> NL.IntSubrange i1 i2
           _ -> bad $ "toType: IntSubrange, " ++ show (e1, e2)
 
+toLit :: Map.Map NL.CompName Integer -> Lus.Expression -> NL.Literal
+toLit enumConMap expr = case expr of
+      Lus.ERange _ e -> toLit enumConMap e
+      Lus.Const e _  -> toLit enumConMap e
+      Lus.Lit c      -> c
+      Lus.Var x      -> NL.Int (enumConMap Map.! (NL.compNameFromName x))
+      _              -> bad $ "toLit: " ++ show expr
+
+toNode :: Map.Map NL.CompName Integer -> Lus.NodeDecl -> NL.NodeDecl
+toNode enumConMap nd =
+      let eqns = case Lus.nodeDef nd of
+                   Nothing -> []
+                   Just (Lus.NodeBody _ eqs) -> concatMap toEqn eqs
+          (ins, outs, locals) = nodeBinders nd
+      in NL.NodeDecl (NL.compNameFromIdent (Lus.nodeName nd))
+                     (NL.NodeBinders (map toBinder ins)
+                                     (map toBinder outs)
+                                     (map toBinder locals))
+                     eqns
+
+  where
+    toBinder (Lus.Binder x ty) =
+      NL.Binder (NL.compNameFromIdent x) (toCType ty)
+
+    toCType (Lus.CType ty clk) =
+      NL.CType (toType ty) (toClock clk)
+
     toClock clk = case clk of
       Lus.BaseClock    -> NL.BaseClock
       Lus.ClockVar{}   -> bad $ "toClock: " ++ show clk
-      Lus.KnownClock e -> NL.WhenTrue (toClockExpr e)
+      Lus.KnownClock e -> toClockExpr e
 
+    toClockExpr :: HasCallStack => Lus.ClockExpr -> NL.Clock
     toClockExpr (Lus.WhenClock _ e nm) =
-      let a1 = toLit e
-          a2 = NL.Var (NL.compNameFromIdent nm)
-      in case a1 of
-        NL.Bool True -> a2
-        oth          -> todo oth
-
-    toLit expr = case expr of
-      Lus.ERange _ e -> toLit e
-      Lus.Const e _  -> toLit e
-      Lus.Lit c      -> c
-      Lus.Var{}      -> todo expr
-      _              -> bad $ "toLit: " ++ show expr
+      case typeOf [] nd e of
+        [ty] -> NL.WhenEq (toAtom e) (NL.Var (NL.compNameFromIdent nm))
+        oth  -> bad $ "toClockExpr: type of clock condition, " ++ show oth
 
     toEqn eqn = case eqn of
       Lus.Define lhs rhs -> [NL.Define (map toLHS lhs) (toRHS rhs)]
@@ -113,7 +126,12 @@ toNL decls = NL.Program <$> mapM toDecl decls
       _ -> NL.CExpr (toCExpr expr)
 
     toCExpr expr = case expr of
-      Lus.Merge{} -> todo expr
+      Lus.Merge i alts ->
+        let iName = Name.origNameToName (Name.identOrigName i)
+            alts1 = map (\(Lus.MergeCase k e) -> (toLit enumConMap k, toExpr e)) alts
+        in case typeOf [] nd (Lus.Var iName) of
+             [ty] -> (NL.Merge (NL.compNameFromName iName, toCType ty) alts1)
+             oth  -> bad $ "toCExpr: type of scrutinee, " ++ show oth
       Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
         case fn of
           Lus.CallUser{} -> bad $ "toCExpr: " ++ show expr
@@ -127,7 +145,14 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.Var{}      -> NL.Atom (toAtom expr)
       Lus.Lit{}      -> NL.Atom (toAtom expr)
       Lus.Const{}    -> NL.Atom (toAtom expr)
-      Lus.When{}     -> todo expr
+      Lus.When e clk -> case toClockExpr clk of
+                          NL.BaseClock  ->
+                            (toExpr e) `NL.When`
+                            (NL.Atom (NL.Lit (NL.Bool True)
+                                     (NL.CType NL.BoolType  NL.BaseClock)))
+                          NL.WhenEq a b ->
+                            (toExpr e) `NL.When`
+                            (NL.CallPrim (NL.Op2 NL.Eq) [NL.Atom a, NL.Atom b])
       Lus.Tuple ls   -> NL.Tuple (map toExpr ls)
       Lus.Array ls   -> NL.Array (map toExpr ls)
       Lus.Select e sel         -> NL.Select (toAtom e) (toSel sel)
@@ -147,8 +172,8 @@ toNL decls = NL.Program <$> mapM toDecl decls
     toField (Lus.Field lbl val) = NL.Field (Name.labText lbl) val
 
     toAtom expr = case expr of
-      Lus.Var x                -> NL.Var (NL.compNameFromName x)
-      Lus.Const (Lus.Lit c) ty -> NL.Lit c (toCType ty)
+      Lus.Var x      -> NL.Var (NL.compNameFromName x)
+      Lus.Const c ty -> NL.Lit (toLit enumConMap c) (toCType ty)
       _ -> bad $ "toAtom: " ++ show expr
 
     toSel sel = case sel of
@@ -156,7 +181,7 @@ toNL decls = NL.Program <$> mapM toDecl decls
       Lus.SelectElement e -> NL.SelectElement (toExpr e)
       Lus.SelectSlice e   -> NL.SelectSlice (fmap toExpr e)
 
-bad :: String -> a
+bad :: HasCallStack => String -> a
 bad msg = error ("Unexpected " ++ msg)
 
 --------------------------------------------------------------------------------
@@ -232,7 +257,7 @@ normFbyExpr _tyDecls _nd expr
 
 toAnfExpr :: [Lus.TypeDecl] -> Lus.NodeDecl -> Lus.Expression -> M (Lus.Expression, [Lus.Equation])
 toAnfExpr tyDecls nd expr = case expr of
-  Lus.Lit{}   -> reportError (Other $ "Unexpected: " ++ show expr)
+  Lus.Lit{}   -> (pure (expr, []))
   Lus.Var{}   -> pure (expr, [])
   Lus.Const{} -> pure (expr, [])
   Lus.ERange _ e -> go e
@@ -324,12 +349,7 @@ traversePrg f prg = traverse goDecl prg
       Lus.DeclareNodeInst{} -> reportError (Other "normalize: bad DeclareNodeInst")
       Lus.DeclareContract{} -> reportError (Other "normalize: bad DeclareContract")
 
-    tyDecls = foldr
-                (\decl acc -> case decl of
-                    Lus.DeclareType d -> d : acc
-                    _ -> acc)
-                []
-                prg
+    tyDecls = typeDecls prg
 
     goNode :: Lus.NodeDecl -> PassM Lus.NodeDecl
     goNode nd =
@@ -355,3 +375,10 @@ foldE f tyDecls nd exprs =
               pure $ (accExprs ++ [expr1], accEqns ++ eqns))
         ([],[])
         exprs
+
+typeDecls :: [Lus.TopDecl] -> [Lus.TypeDecl]
+typeDecls =
+  foldr (\decl acc -> case decl of
+            Lus.DeclareType d -> d : acc
+            _ -> acc)
+        []

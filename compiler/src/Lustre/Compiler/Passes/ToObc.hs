@@ -38,7 +38,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
 
     step = Obc.Method
       { Obc.mName    = fnStep
-      , Obc.mBinders = fmap cType binders
+      , Obc.mBinders = fmap Stc.cType binders
       , Obc.mBody    = Obc.seqStmts $ map tcToStmt tcs
       }
 
@@ -68,8 +68,11 @@ tcToStmt tc = case tc of
 
 ctrl :: Stc.Clock -> Obc.Stmt -> Obc.Stmt
 ctrl clk stmt = case clk of
-  BaseClock  -> stmt
-  WhenTrue x -> Obc.If (Obc.Atom (toObcAtom x)) stmt Obc.Skip
+  Stc.BaseClock  -> stmt
+  Stc.WhenEq a b -> Obc.If (Obc.CallPrim (Obc.Op2 Obc.Eq) [ Obc.Atom (toObcAtom a)
+                                                          , Obc.Atom (toObcAtom b) ])
+                           stmt
+                           Obc.Skip
 
 cExprToStmt :: Stc.LHS Stc.Expr -> Stc.CExpr -> Obc.Stmt
 cExprToStmt x cexpr = case cexpr of
@@ -88,7 +91,10 @@ cExprToStmt x cexpr = case cexpr of
   Stc.If cnd thn els ->
     let x1 = (toObcLHS x) in
       Obc.If (toObcExpr cnd) (Obc.Let x1 (toObcExpr thn)) (Obc.Let x1 (toObcExpr els))
-  oth -> todo oth
+  Stc.Merge (y,_) ls ->
+    Obc.Switch (Obc.Atom (Obc.Var (Obc.Oth y)))
+               (map (\(c,e) -> (c, cExprToStmt x (Stc.Expr e))) ls)
+  -- oth -> todo oth
   where
     toVar from = case from of
       Stc.Var y -> Obc.Oth y
@@ -99,6 +105,7 @@ toObcExpr expr = case expr of
   Stc.Atom atom      -> Obc.Atom (toObcAtom atom)
   Stc.CallPrim pr ls -> Obc.CallPrim pr (map toObcExpr ls)
   Stc.Select x sel   -> Obc.Select (toObcAtom x) (fmap toObcExpr sel)
+  Stc.When e _       -> toObcExpr e
   _ -> error $ show expr
 
 toObcAtom :: Stc.Atom -> Obc.Atom
@@ -126,6 +133,7 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.Skip                          -> Obc.Skip
           Obc.Do s1 s2                      -> Obc.Do (go s1) (go s2)
           Obc.If cnd thn els                -> Obc.If (goExpr cnd) (go thn) (go els)
+          Obc.Switch cnd ls                 -> Obc.Switch (goExpr cnd) (map (\(c,e) -> (c, go e)) ls)
           Obc.UpdateFields lhs updates      -> Obc.UpdateFields (goLHS lhs) (map goField updates)
           Obc.Let lhs expr                  -> Obc.Let (goLHS lhs) (goExpr expr)
           Obc.LetState lhs expr             -> Obc.LetState (goLHS lhs) (goExpr expr)

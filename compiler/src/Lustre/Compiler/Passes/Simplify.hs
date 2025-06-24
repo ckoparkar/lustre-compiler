@@ -21,30 +21,42 @@ foldExprs = fmap foldExprsInNode
 
 foldExprsInNode :: NodeDecl -> NodeDecl
 foldExprsInNode (NodeDecl name binders eqns0) =
-  NodeDecl name binders (runN 100 (eqns0, Map.empty))
+  NodeDecl name binders (runN 100 (eqns0, Map.empty, Map.empty))
   where
-    runN :: Int -> ([Equation], Map.Map CompName Expr) -> [Equation]
-    runN 0 (eqns, _env) = eqns
-    runN n (eqns, env)  = runN (n-1) (run env eqns)
+    runN :: Int -> ([Equation], Map.Map CompName Expr, Map.Map CompName CExpr)
+         -> [Equation]
+    runN 0 (eqns, _eenv, _cenv) = eqns
+    runN n (eqns, eenv, cenv)   = runN (n-1) (run eenv cenv eqns)
 
-    run env eqns =
-      foldr (\eqn (acc, accEnv) ->
-               let (eqn1, env1) = go accEnv eqn
-               in (eqn1 : acc, env1))
-            ([], env)
+    run eenv cenv eqns =
+      foldr (\eqn (acc, accEEnv, accCEnv) ->
+               let (eqn1, eenv1, cenv1) = go accEEnv accCEnv eqn
+               in (eqn1 : acc, eenv1, cenv1))
+            ([], eenv, cenv)
             eqns
 
-    go env eqn@(Define lhs rhs) =
+    go eenv cenv eqn@(Define lhs rhs) =
       case (lhs, rhs) of
         ([LVar x], CExpr (Expr (Atom (Var nm)))) ->
-          case Map.lookup nm env of
-            Nothing -> (eqn, Map.insert x (Atom (Var nm)) env)
-            Just r  -> (Define lhs (CExpr (Expr r)), env)
+          case Map.lookup nm eenv of
+            Nothing -> case Map.lookup nm cenv of
+                         Nothing -> ( eqn
+                                    , Map.insert x (Atom (Var nm)) eenv
+                                    , Map.insert x (Expr (Atom (Var nm))) cenv
+                                    )
+                         Just r  -> (Define [LVar x] (CExpr r), eenv, cenv)
+            Just r  -> (Define lhs (CExpr (Expr r)), eenv, cenv)
         ([LVar x], CExpr cexpr) -> case cexpr of
-          Expr e   -> let e1 = goExpr env e
-                      in (Define [LVar x] (CExpr (Expr e1)), Map.insert x e1 env)
-          _ -> (eqn, env)
-        _ -> (eqn, env)
+          Expr e   -> let e1 = goExpr eenv e
+                      in (Define lhs (CExpr (Expr e1)), Map.insert x e1 eenv, cenv)
+          Merge cnd alts -> let alts1 = map (\(c,e) -> let e1 = goExpr eenv e in (c, e1)) alts
+                            in (Define lhs (CExpr (Merge cnd alts1)), eenv, cenv)
+          If cnd thn els -> let cnd1 = goExpr eenv cnd
+                                thn1 = goExpr eenv thn
+                                els1 = goExpr eenv els
+                                ce   = If cnd1 thn1 els1
+                            in (Define lhs (CExpr ce), eenv, Map.insert x ce cenv)
+        _ -> (eqn, eenv, cenv)
 
     goExpr env expr = case expr of
       Atom a                   -> case a of
