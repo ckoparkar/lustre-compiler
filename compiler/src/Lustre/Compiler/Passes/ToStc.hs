@@ -1,6 +1,7 @@
 module Lustre.Compiler.Passes.ToStc
   ( toStcM, toStc ) where
 
+import Data.List ( nub )
 import Data.Map qualified as Map
 import Lustre.Compiler.IR.NLustre qualified as NL
 import Lustre.Compiler.IR.Stc qualified as Stc
@@ -21,15 +22,33 @@ nodeToSystem nd@(NL.NodeDecl name binders eqns) =
     { Stc.sysName      = name
     , Stc.sysBinders   = binders
     , Stc.sysTcs       = tcs
-    , Stc.sysInits     = concatMap toInit eqns
+    , Stc.sysInits     = inits
     , Stc.sysInstances = concatMap toInst tcs
     }
   where
     tcs = concatMap (eqnToTc (NL.nodeEnv nd)) eqns
 
-    toInit (NL.Define lhs rhs) =
+    inits =
+      map (\x -> case Map.lookup x initValues of
+                   Nothing -> case Stc.cType ((Stc.nodeEnv nd) Map.! x) of
+                                Stc.IntType  -> (x, Stc.Int 0)
+                                Stc.RealType -> (x, Stc.Real 0.0)
+                                ty -> todo ty
+                   Just c  -> (x,c))
+          (nub initVars)
+
+    initVars =
+      foldr (\tc acc -> case tc of
+                Stc.Next x _ _ -> (Stc.lhsVar x) : acc
+                _              -> acc)
+            []
+            tcs
+
+    initValues = Map.fromList (concatMap initValue eqns)
+
+    initValue (NL.Define lhs rhs) =
       case (lhs, rhs) of
-        ([x], NL.Fby2 c _) -> [(x,c)]
+        ([x], NL.Fby2 c _) -> [(Stc.lhsVar x,c)]
         _                  -> []
 
     toInst tc =

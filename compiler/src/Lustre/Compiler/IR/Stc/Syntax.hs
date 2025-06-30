@@ -21,7 +21,7 @@ data SystemDecl = SystemDecl
   { sysName      :: CompName
   , sysBinders   :: NodeBinders CType
   , sysTcs       :: [Tc]
-  , sysInits     :: [(LHS Expr, Literal)]
+  , sysInits     :: [(CompName, Literal)]
   , sysInstances :: [(CompName, CompName)]
   }
   deriving Show

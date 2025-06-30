@@ -1,49 +1,50 @@
 module Lustre.Compiler.Passes.Schedule
-  ( scheduleM, schedule ) where
+  ( scheduleM ) where
 
 import Data.List ( partition )
 import Data.Set qualified as Set
 import Data.Graph qualified as Graph
 import Lustre.Compiler.IR.Stc
-import Lustre.Compiler.Monad ( PassM )
+import Lustre.Compiler.Monad
 import Lustre.Utils ( todo )
+import Prettyprinter ( Pretty(..) )
+import Prettyprinter qualified as PP
 
 --------------------------------------------------------------------------------
 
 scheduleM :: Program -> PassM Program
-scheduleM = pure . schedule
+scheduleM = traverse scheduleSystem
 
-schedule :: Program -> Program
-schedule (Program ls) = Program (map go ls)
-  where
-    go decl = case decl of
-      DeclareNode s -> DeclareNode (scheduleSystem s)
-      _             -> decl
+scheduleSystem :: SystemDecl -> PassM SystemDecl
+scheduleSystem s =
+  do tcs <- reorderTcs (sysTcs s)
+     pure s { sysTcs = tcs }
 
-scheduleSystem :: SystemDecl -> SystemDecl
-scheduleSystem s = s { sysTcs = reorderTcs (sysTcs s) }
+reorderTcs :: [Tc] -> PassM [Tc]
+reorderTcs tcs = (locals_writeBeforeRead tcs) >>= (pure . state_readBeforeWrite)
 
-reorderTcs :: [Tc] -> [Tc]
-reorderTcs = state_readBeforeWrite . locals_writeBeforeRead
-
-locals_writeBeforeRead :: [Tc] -> [Tc]
+locals_writeBeforeRead :: [Tc] -> PassM [Tc]
 locals_writeBeforeRead tcs =
-  let edges           = map (\tc -> let binds = bindsOfTc tc
-                                        key = lhsKey (head binds)
-                                    in (tc, key , Set.toList (freeVars tc)))
-                            tcs
+  let edges = map (\tc -> let binds = bindsOfTc tc
+                              key = lhsVar (head binds)
+                          in (tc, key , Set.toList (dependsOn tc)))
+                  tcs
       (graph, vFn, _) = Graph.graphFromEdges edges
-      sorted          = Graph.reverseTopSort graph
-  in map (fst3 . vFn) sorted
+      cycles = foldr (\scc acc -> case scc of
+                         Graph.CyclicSCC ls -> (PP.tupled $ map (pretty . bindsOfTc) ls) : acc
+                         _ -> acc)
+                     []
+                     (Graph.stronglyConnComp edges)
+  in case cycles of
+       []  -> pure $ map (fst3 . vFn) (Graph.reverseTopSort graph)
+       x:_ -> reportError (Other $ "Cyclic definitions: " ++ show x)
   where
     fst3 (a,_,_) = a
-    lhsKey lhs = case lhs of
-                   LVar x         -> x
-                   LSelect lhs1 _ -> lhsKey lhs1
+
 
 state_readBeforeWrite :: [Tc] -> [Tc]
 state_readBeforeWrite tcs = let (nexts, oth) = partition isNext tcs
-                           in oth ++ nexts
+                            in oth ++ nexts
   where
     isNext tc = case tc of
         Next _ _ _ -> True
@@ -51,3 +52,14 @@ state_readBeforeWrite tcs = let (nexts, oth) = partition isNext tcs
 
 _wellScheduled :: [Tc] -> Bool
 _wellScheduled ls = todo ls
+
+--------------------------------------------------------------------------------
+
+class FreeVars a => DependsOn a where
+  dependsOn :: a -> Set.Set CompName
+  dependsOn = freeVars
+
+instance DependsOn Tc where
+  dependsOn tc = case tc of
+    Next{} -> Set.empty
+    _      -> freeVars tc

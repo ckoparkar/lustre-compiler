@@ -4,7 +4,7 @@ module Lustre.Compiler.IR.Base
   , Binder(..), LHS(..), Type(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
-  , nodeEnv, allBinders
+  , nodeEnv, allBinders, lhsVar
   , FreeVars(..)
   , module Language.Lustre.AST
   , module Language.Lustre.Name
@@ -31,6 +31,12 @@ data BaseProgram a = Program [BaseTopDecl a]
 instance Functor BaseProgram where
   fmap f (Program ls) = Program (map (fmap f) ls)
 
+instance Foldable BaseProgram where
+  foldr f b (Program ls) = foldr (flip (foldr f)) b ls
+
+instance Traversable BaseProgram where
+  traverse f (Program ls) = Program <$> (traverse (traverse f) ls)
+
 data BaseTopDecl a
   = DeclareType  !TypeDecl
   | DeclareConst !ConstDef
@@ -42,6 +48,17 @@ instance Functor BaseTopDecl where
     DeclareType a  -> DeclareType a
     DeclareConst a -> DeclareConst a
     DeclareNode nd -> DeclareNode (f nd)
+
+instance Foldable BaseTopDecl where
+  foldr f acc decl = case decl of
+    DeclareNode nd -> f nd acc
+    _              -> acc
+
+instance Traversable BaseTopDecl where
+  traverse f decl = case decl of
+    DeclareNode nd -> DeclareNode <$> f nd
+    DeclareType a  -> pure (DeclareType a)
+    DeclareConst a -> pure (DeclareConst a)
 
 -- | Declare a named type.
 data TypeDecl = TypeDecl
@@ -211,6 +228,11 @@ nodeEnv nd =
 
 allBinders :: NodeBinders ty -> [Binder ty]
 allBinders (NodeBinders ins outs locals) = ins ++ outs ++ locals
+
+lhsVar :: LHS e -> CompName
+lhsVar lhs = case lhs of
+  LVar x         -> x
+  LSelect lhs1 _ -> lhsVar lhs1
 
 --------------------------------------------------------------------------------
 

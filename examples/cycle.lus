@@ -1,0 +1,6 @@
+node cycle() returns (x, y, z: real)
+let
+  x = y;
+  y = z;
+  z = x;
+tel

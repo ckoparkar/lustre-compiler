@@ -5,7 +5,6 @@ import Lustre.Compiler.IR.Stc qualified as Stc
 import Lustre.Compiler.IR.Obc qualified as Obc
 import Lustre.Compiler.Monad ( PassM )
 import Lustre.Compiler.IR.Base
-import Lustre.Utils ( todo )
 import Data.Text ( pack )
 import Data.Map qualified as Map
 
@@ -31,10 +30,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
        Real{} -> RealType
        Bool{} -> BoolType
 
-    mems    = map (\(lhs,c) ->
-                     case lhs of
-                       LVar x -> Binder x (typeOfLit c)
-                       LSelect{} -> todo lhs) inits
+    mems    = map (\(x,c) -> Binder x (typeOfLit c)) inits
 
     step = Obc.Method
       { Obc.mName    = fnStep
@@ -46,7 +42,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
       { Obc.mName    = fnReset
       , Obc.mBinders = mempty
       , Obc.mBody    = Obc.seqStmts $
-                         map (\(x,c) -> Obc.LetState (toObcLHS x) (Obc.Atom (Obc.Lit c))) inits ++
+                         map (\(x,c) -> Obc.LetState (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
                          map (\(cls,i) -> Obc.LetCall [] (cls,i) fnReset []) insts
       }
 
@@ -59,7 +55,7 @@ tcToStmt tc = case tc of
   Stc.Define x clk cexpr ->
     ctrl clk (cExprToStmt x cexpr)
   Stc.Next x clk expr ->
-    ctrl clk (Obc.LetState (toObcLHS x) (toObcExpr expr))
+    ctrl clk (cExprToStmt x (Stc.Expr expr))
   Stc.Call binds clk name args (ann,_) ->
     ctrl clk (Obc.LetCall (map toObcLHS binds)
                           (name, ann)
@@ -94,7 +90,6 @@ cExprToStmt x cexpr = case cexpr of
   Stc.Merge (y,_) ls ->
     Obc.Switch (Obc.Atom (Obc.Var (Obc.Oth y)))
                (map (\(c,e) -> (c, cExprToStmt x (Stc.Expr e))) ls)
-  -- oth -> todo oth
   where
     toVar from = case from of
       Stc.Var y -> Obc.Oth y
