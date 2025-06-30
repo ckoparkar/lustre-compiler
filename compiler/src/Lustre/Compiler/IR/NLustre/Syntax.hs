@@ -1,8 +1,9 @@
 module Lustre.Compiler.IR.NLustre.Syntax
-  ( Program, NodeDecl
+  ( Program, NodeDecl(..)
   , Equation(..), RHS(..)
   , CExpr(..), Expr(..), Atom(..)
   , Clock(..), CType(..)
+  , nodeEnv
   , module Lustre.Compiler.IR.Base
   ) where
 
@@ -12,11 +13,24 @@ import Prettyprinter qualified as PP
 import Lustre.Compiler.IR.Base
 import Lustre.Compiler.IR.Lustre.Compat ()
 import Data.Set qualified as Set
+import Data.Map qualified as Map
 
 --------------------------------------------------------------------------------
 
 type Program  = BaseProgram NodeDecl
-type NodeDecl = BaseNodeDecl Equation CType
+
+data NodeDecl = NodeDecl
+  { nodeName    :: CompName
+    -- ^ Node name
+
+  , nodeBinders :: NodeBinders CType
+    -- ^ Variables bound in a node
+
+  , nodeEqns    :: [Equation]
+    -- ^ Groups of recursive equations
+  }
+  deriving Show
+
 
 data Equation = Define [LHS Expr] RHS
   deriving Show
@@ -70,7 +84,15 @@ data Clock = BaseClock
 -- | Type on a boolean clock.
 data CType = CType { cType :: Type, cClock :: Clock }
   deriving Show
+--------------------------------------------------------------------------------
 
+nodeEnv :: NodeDecl -> Map.Map CompName CType
+nodeEnv nd =
+  Map.fromList $ map (\(Binder x ty) -> (x,ty)) (allBinders (nodeBinders nd))
+
+
+--------------------------------------------------------------------------------
+-- Free variables
 --------------------------------------------------------------------------------
 
 instance FreeVars RHS where
@@ -112,6 +134,13 @@ instance FreeVars Atom where
 --------------------------------------------------------------------------------
 -- Pretty printing
 --------------------------------------------------------------------------------
+
+instance Pretty NodeDecl where
+  pretty nd = PP.vsep [ pretty "node" PP.<+> pretty (nodeName nd) PP.<> pretty (nodeBinders nd)
+                      , pretty "let"
+                      , PP.indent 4 (pretty (nodeEqns nd))
+                      , pretty "tel"
+                      ]
 
 instance Pretty Equation where
   pretty (Define lhs rhs) =

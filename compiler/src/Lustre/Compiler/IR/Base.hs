@@ -1,11 +1,11 @@
 module Lustre.Compiler.IR.Base
-  ( BaseProgram(..), BaseTopDecl(..), BaseNodeDecl(..), BaseEqnGroup(..)
+  ( BaseProgram(..), BaseTopDecl(..), BaseEqnGroup(..)
   , TypeDecl(..), TypeDef(..), FieldType(..), Selector(..), ConstDef(..), NodeBinders(..)
   , Binder(..), LHS(..), Type(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
-  , nodeEnv, allBinders, lhsVar
   , FreeVars(..)
+  , allBinders, lhsVar
   , module Language.Lustre.AST
   , module Language.Lustre.Name
   ) where
@@ -109,18 +109,6 @@ data ConstDef = ConstDef
          constants. -}
   } deriving Show
 
-data BaseNodeDecl eqn ty = NodeDecl
-  { nodeName    :: CompName
-    -- ^ Node name
-
-  , nodeBinders :: NodeBinders ty
-    -- ^ Variables bound in a node
-
-  , nodeEqns    :: [eqn]
-    -- ^ Groups of recursive equations
-  }
-  deriving Show
-
 data NodeBinders ty = NodeBinders
   { nodeInputs  :: [Binder ty]
   , nodeOutputs :: [Binder ty]
@@ -222,10 +210,6 @@ compNameFromOrigName (Name.OrigName uniq mo unqual thing) =
 
 --------------------------------------------------------------------------------
 
-nodeEnv :: BaseNodeDecl eqn ty -> Map.Map CompName ty
-nodeEnv nd =
-  Map.fromList $ map (\(Binder x ty) -> (x,ty)) (allBinders (nodeBinders nd))
-
 allBinders :: NodeBinders ty -> [Binder ty]
 allBinders (NodeBinders ins outs locals) = ins ++ outs ++ locals
 
@@ -234,6 +218,8 @@ lhsVar lhs = case lhs of
   LVar x         -> x
   LSelect lhs1 _ -> lhsVar lhs1
 
+--------------------------------------------------------------------------------
+-- Free variables
 --------------------------------------------------------------------------------
 
 class FreeVars a where
@@ -315,13 +301,6 @@ instance Pretty a => Pretty (NodeBinders a) where
             , pretty "returns" PP.<+> prettyList outs PP.<> PP.semi
             , pretty "var " PP.<> PP.hsep (PP.punctuate PP.comma (map pretty locals)) PP.<> PP.semi
             ]
-
-instance (Pretty e, Pretty ty) => Pretty (BaseNodeDecl e ty) where
-  pretty nd = PP.vsep [ pretty "node" PP.<+> pretty (nodeName nd) PP.<> pretty (nodeBinders nd)
-                      , pretty "let"
-                      , PP.indent 4 (pretty (nodeEqns nd))
-                      , pretty "tel"
-                      ]
 
 instance Pretty ty => Pretty (Binder ty) where
   pretty (Binder x ty) = pretty x PP.<> pretty ":" PP.<> pretty ty

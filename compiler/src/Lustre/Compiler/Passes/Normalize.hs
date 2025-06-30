@@ -104,8 +104,8 @@ toNode enumConMap nd =
     toClockExpr :: HasCallStack => Lus.ClockExpr -> NL.Clock
     toClockExpr (Lus.WhenClock _ e nm) =
       case typeOf [] nd e of
-        [ty] -> NL.WhenEq (toAtom e) (NL.Var (NL.compNameFromIdent nm))
-        oth  -> bad $ "toClockExpr: type of clock condition, " ++ show oth
+        [_one] -> NL.WhenEq (toAtom e) (NL.Var (NL.compNameFromIdent nm))
+        oth    -> bad $ "toClockExpr: type of clock condition, " ++ show oth
 
     toEqn eqn = case eqn of
       Lus.Define lhs rhs -> [NL.Define (map toLHS lhs) (toRHS rhs)]
@@ -174,7 +174,7 @@ toNode enumConMap nd =
     toAtom expr = case expr of
       Lus.Var x      -> NL.Var (NL.compNameFromName x)
       Lus.Const c ty -> NL.Lit (toLit enumConMap c) (toCType ty)
-      Lus.Lit c      -> case typeOf [] nd expr of
+      Lus.Lit{}      -> case typeOf [] nd expr of
                           [ty] ->  NL.Lit (toLit enumConMap expr) (toCType ty)
                           oth  -> bad $ "toAtom: type of literal, " ++ show oth
       _ -> bad $ "toAtom: " ++ show expr
