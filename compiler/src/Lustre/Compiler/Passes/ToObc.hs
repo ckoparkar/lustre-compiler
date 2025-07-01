@@ -135,7 +135,7 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.Switch cnd ls                 -> Obc.Switch (goExpr cnd) (map (\(c,e) -> (c, go e)) ls)
           Obc.UpdateFields lhs updates      -> Obc.UpdateFields (goLHS lhs) (map goField updates)
           Obc.Let lhs expr                  -> Obc.Let (goLHS lhs) (goExpr expr)
-          Obc.CopyStruct lhs from tyname    -> Obc.CopyStruct (goAddrOf (goLHS lhs)) (Obc.Addr (goVar from)) tyname
+          Obc.CopyStruct lhs from tyname    -> Obc.CopyStruct (goLHS lhs) (goVar from) tyname
           Obc.LetAllocStruct lhs tyname     -> Obc.LetAllocStruct (goLHS lhs) tyname
           Obc.LetCall binds cl rator rands t-> Obc.LetCall (map goLHS binds) cl rator (map goExpr rands) t
 

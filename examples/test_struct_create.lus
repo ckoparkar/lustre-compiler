@@ -1,5 +1,12 @@
 type T = struct { x : int; y : bool };
 
+type U = struct { x : T };
+
+function g (a : T) returns (y : U);
+let
+  y = U { x = a };
+tel
+
 function f (x : T) returns (y : int)
 let
   y = if x.y then x.x else 0;

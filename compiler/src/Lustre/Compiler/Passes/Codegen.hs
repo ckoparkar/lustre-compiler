@@ -169,9 +169,8 @@ cgStmt = go
               [C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgExpr val); |])
             updates
 
-      CopyStruct to from tyname ->
-        let cgty = [C.cty| struct $id:tyname |]
-        in [[C.cstm| memcpy($exp:(cgLHS to), $exp:(cgVar from), sizeof($ty:cgty)); |]]
+      CopyStruct to from _tyname ->
+        [[C.cstm| $exp:(cgLHS to) = $exp:(cgVar from); |]]
 
       Let lhs expr ->
         [[C.cstm| $exp:(cgLHS lhs) = $exp:(cgExpr expr); |]]
