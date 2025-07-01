@@ -36,6 +36,7 @@ data Tc
       , cName  :: CompName
       , cArgs  :: [Expr]
       , cAnn   :: (CompName, Bool)
+      , cRet   :: [CType]
       }
   deriving Show
 
@@ -83,7 +84,8 @@ instance Pretty Tc where
     Next lhs clk e  -> PP.vsep [ pretty "next " PP.<> pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                , PP.indent 4 (pretty e)
                                ]
-    Call lhs clk f args ann -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
+    Call lhs clk f args ann _tys ->
+                               PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
                                        , PP.indent 4 $
                                            (pretty f PP.<>
                                             PP.langle PP.<> pretty ann PP.<> PP.rangle PP.<>

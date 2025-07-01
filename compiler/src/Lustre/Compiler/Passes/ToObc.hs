@@ -42,8 +42,8 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
       { Obc.mName    = fnReset
       , Obc.mBinders = mempty
       , Obc.mBody    = Obc.seqStmts $
-                         map (\(x,c) -> Obc.LetState (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
-                         map (\(cls,i) -> Obc.LetCall [] (cls,i) fnReset []) insts
+                         map (\(x,c) -> Obc.Let (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
+                         map (\(cls,i) -> Obc.LetCall [] (cls,i) fnReset [] []) insts
       }
 
 fnReset, fnStep :: CompName
@@ -56,17 +56,19 @@ tcToStmt tc = case tc of
     ctrl clk (cExprToStmt x cexpr)
   Stc.Next x clk expr ->
     ctrl clk (cExprToStmt x (Stc.Expr expr))
-  Stc.Call binds clk name args (ann,_) ->
+  Stc.Call binds clk name args (ann,_) tys ->
     ctrl clk (Obc.LetCall (map toObcLHS binds)
                           (name, ann)
                           fnStep
-                          (map toObcExpr args))
+                          (map toObcExpr args)
+                          (map Stc.cType tys))
 
 ctrl :: Stc.Clock -> Obc.Stmt -> Obc.Stmt
 ctrl clk stmt = case clk of
   Stc.BaseClock  -> stmt
   Stc.WhenEq a b -> Obc.If (Obc.CallPrim (Obc.Op2 Obc.Eq) [ Obc.Atom (toObcAtom a)
-                                                          , Obc.Atom (toObcAtom b) ])
+                                                          , Obc.Atom (toObcAtom b) ]
+                                         BoolType)
                            stmt
                            Obc.Skip
 
@@ -98,7 +100,7 @@ cExprToStmt x cexpr = case cexpr of
 toObcExpr :: Stc.Expr -> Obc.Expr
 toObcExpr expr = case expr of
   Stc.Atom atom      -> Obc.Atom (toObcAtom atom)
-  Stc.CallPrim pr ls -> Obc.CallPrim pr (map toObcExpr ls)
+  Stc.CallPrim pr ls ty -> Obc.CallPrim pr (map toObcExpr ls) (Stc.cType ty)
   Stc.Select x sel   -> Obc.Select (toObcAtom x) (fmap toObcExpr sel)
   Stc.When e _       -> toObcExpr e
   _ -> error $ show expr
@@ -134,11 +136,11 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.LetState lhs expr             -> Obc.LetState (goLHS lhs) (goExpr expr)
           Obc.LetCopyStruct lhs from tyname -> Obc.LetCopyStruct (goAddrOf (goLHS lhs)) (Obc.Addr (goVar from)) tyname
           Obc.LetAllocStruct lhs tyname     -> Obc.LetAllocStruct (goLHS lhs) tyname
-          Obc.LetCall binds cl rator rands  -> Obc.LetCall (map goLHS binds) cl rator (map goExpr rands)
+          Obc.LetCall binds cl rator rands t-> Obc.LetCall (map goLHS binds) cl rator (map goExpr rands) t
 
         goExpr expr = case expr of
           Obc.Atom atom      -> Obc.Atom (goAtom atom)
-          Obc.CallPrim pr ls -> Obc.CallPrim pr (map goExpr ls)
+          Obc.CallPrim pr ls ty -> Obc.CallPrim pr (map goExpr ls) ty
           Obc.Select x sel   -> Obc.Select (goAtom x) (fmap goExpr sel)
 
         goAtom atom = case atom of

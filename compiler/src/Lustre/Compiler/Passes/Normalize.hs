@@ -149,10 +149,12 @@ toNode enumConMap nd =
                           NL.BaseClock  ->
                             (toExpr e) `NL.When`
                             (NL.Atom (NL.Lit (NL.Bool True)
-                                     (NL.CType NL.BoolType  NL.BaseClock)))
+                                     (NL.CType NL.BoolType NL.BaseClock)))
                           NL.WhenEq a b ->
                             (toExpr e) `NL.When`
-                            (NL.CallPrim (NL.Op2 NL.Eq) [NL.Atom a, NL.Atom b])
+                            (NL.CallPrim (NL.Op2 NL.Eq)
+                                         [NL.Atom a, NL.Atom b]
+                                         (NL.CType NL.BoolType NL.BaseClock))
       Lus.Tuple ls   -> NL.Tuple (map toExpr ls)
       Lus.Array ls   -> NL.Array (map toExpr ls)
       Lus.Select e sel         -> NL.Select (toAtom e) (toSel sel)
@@ -161,12 +163,12 @@ toNode enumConMap nd =
       Lus.UpdateStruct (Just nm) e ls -> NL.UpdateStruct (NL.compNameFromName nm) (toAtom e) (map (fmap toExpr) (map toField ls))
       Lus.WithThenElse{}       -> todo expr
       Lus.Merge{}              -> bad $ "toExpr: " ++ show expr
-      Lus.Call (Lus.NodeInst fn []) args _clk _ctys ->
+      Lus.Call (Lus.NodeInst fn []) args _clk (Just [cty]) ->
         let args1 = map toExpr args in
           case fn of
             Lus.CallUser{}      -> bad $ "UntoExpr: " ++ show expr
-            Lus.CallPrim _ prim -> NL.CallPrim prim args1
-      Lus.Call (Lus.NodeInst _ (_x:_xs)) _args _clk __ctys ->
+            Lus.CallPrim _ prim -> NL.CallPrim prim args1 (toCType cty)
+      Lus.Call _fn _args _clk _ctys ->
         bad $ "toExpr: static arguments not empty, " ++ show expr
 
     toField (Lus.Field lbl val) = NL.Field (Name.labText lbl) val

@@ -1,9 +1,8 @@
 module Lustre.Compiler.IR.NLustre.Syntax
-  ( Program, NodeDecl(..)
-  , Equation(..), RHS(..)
-  , CExpr(..), Expr(..), Atom(..)
-  , Clock(..), CType(..)
+  ( Program, NodeDecl(..), Equation(..), RHS(..)
+  , CExpr(..), Expr(..), Atom(..), Clock(..), CType(..)
   , nodeEnv
+  , TypeOf(..)
   , module Lustre.Compiler.IR.Base
   ) where
 
@@ -12,6 +11,8 @@ import Prettyprinter qualified as PP
 
 import Lustre.Compiler.IR.Base
 import Lustre.Compiler.IR.Lustre.Compat ()
+import Lustre.Utils ( todo )
+import Data.List ( find )
 import Data.Set qualified as Set
 import Data.Map qualified as Map
 
@@ -31,7 +32,6 @@ data NodeDecl = NodeDecl
   }
   deriving Show
 
-
 data Equation = Define [LHS Expr] RHS
   deriving Show
 
@@ -50,12 +50,12 @@ data CExpr
     {-^ Oversampling -}
   | If Expr Expr Expr
     {-^ Multiplexing -}
-  deriving Show
+  deriving (Show, Eq, Ord)
 
 -- | Simple expressions.
 data Expr
   = Atom Atom
-  | CallPrim PrimNode [Expr]
+  | CallPrim PrimNode [Expr] CType
     {-^ Primitives -}
   | Select Atom (Selector Expr)
     {-^ Create a new struct value.  'Name' is the struct type -}
@@ -68,28 +68,28 @@ data Expr
       The expression is the struct being updated. -}
   | Expr `When` Expr
     {-^ Subsampling -}
-  deriving Show
+  deriving (Show, Eq, Ord)
 
 -- | Atomic expressions.
 data Atom
   = Lit Literal CType  {-^ Constant   -}
   | Var CompName       {-^ Variable   -}
-  deriving Show
+  deriving (Show, Eq, Ord)
 
 -- | A boolean clock.  The base clock is always @true@.
 data Clock = BaseClock
            | WhenEq Atom Atom
-  deriving Show
+  deriving (Show, Eq, Ord)
 
--- | Type on a boolean clock.
+-- | Type and a clock.
 data CType = CType { cType :: Type, cClock :: Clock }
-  deriving Show
+  deriving (Show, Eq, Ord)
+
 --------------------------------------------------------------------------------
 
 nodeEnv :: NodeDecl -> Map.Map CompName CType
 nodeEnv nd =
   Map.fromList $ map (\(Binder x ty) -> (x,ty)) (allBinders (nodeBinders nd))
-
 
 --------------------------------------------------------------------------------
 -- Free variables
@@ -110,7 +110,7 @@ instance FreeVars CExpr where
 instance FreeVars Expr where
   freeVars expr = case expr of
     Atom a              -> freeVars a
-    CallPrim _ ls       -> Set.unions (map freeVars ls)
+    CallPrim _ ls ty    -> Set.unions (map freeVars ls) <> freeVars ty
     Select a sel        -> freeVars a <> freeVars sel
     Tuple ls            -> Set.unions (map freeVars ls)
     Array ls            -> Set.unions (map freeVars ls)
@@ -130,6 +130,54 @@ instance FreeVars Atom where
   freeVars a = case a of
     Lit _ ty -> freeVars ty
     Var x    -> Set.singleton x
+
+
+--------------------------------------------------------------------------------
+-- Type inference
+--------------------------------------------------------------------------------
+
+class TypeOf a where
+  typeOf :: [TypeDecl] -> Map.Map CompName CType -> a -> [CType]
+
+instance TypeOf Expr where
+  typeOf tyDecls nenv expr = case expr of
+    Atom a          -> typeOf tyDecls nenv a
+    CallPrim _ _ ty -> [ty]
+    Select e s  ->
+      case s of
+        SelectField f -> case typeOf tyDecls nenv e of
+                           [CType (NamedType tyname) _] ->
+                             let ftys = fieldTys tyname
+                             in case find ((f ==) . fieldName) ftys of
+                                  Nothing -> bad $ "Unknown field, " ++ show f
+                                  Just ty -> [CType (fieldType ty) BaseClock]
+                           oth -> bad $ "Not a named type, " ++ show oth
+        oth -> todo oth
+    Struct nm _ -> [CType (NamedType nm) BaseClock]
+    UpdateStruct nm _ _ -> [CType (NamedType nm) BaseClock]
+    _ -> todo (show expr)
+    where
+      fieldTys nm =
+        case find (\d -> (typeName d) == nm) tyDecls of
+          Nothing   -> bad $ "Unknown type " ++ show nm
+          Just decl -> case typeDef decl of
+                         Nothing  -> bad $ "Abstract type " ++ show nm
+                         Just def -> case def of
+                                         IsStruct fs  -> fs
+                                         IsType alias -> bad $ "Alias " ++ show alias
+                                         IsEnum e     -> bad $ "Enum " ++ show e
+
+
+instance TypeOf Atom where
+  typeOf _tyDecls nenv atom = case atom of
+    Var x    -> [lookupLocal x]
+    Lit _ ty -> [ty]
+    where
+      lookupLocal x = nenv Map.! x
+
+
+bad :: String -> a
+bad msg = error ("Unexpected " ++ msg)
 
 --------------------------------------------------------------------------------
 -- Pretty printing
@@ -168,7 +216,7 @@ instance Pretty CExpr where
 instance Pretty Expr where
   pretty expr = case expr of
     Atom c -> pretty c
-    CallPrim pr ls -> pretty pr PP.<> PP.parens (PP.hsep (PP.punctuate PP.comma (map pretty ls)))
+    CallPrim pr ls _ -> pretty pr PP.<> PP.parens (PP.hsep (PP.punctuate PP.comma (map pretty ls)))
     Select e s    -> pretty e PP.<> pretty s
     Tuple es      -> PP.parens (PP.hsep (PP.punctuate PP.comma (map pretty es)))
     Array es      -> PP.brackets (PP.hsep (PP.punctuate PP.comma (map pretty es)))

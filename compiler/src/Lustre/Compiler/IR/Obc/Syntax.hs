@@ -68,13 +68,14 @@ data Stmt
       , lcClass :: (CompName, CompName)
       , lcRator :: CompName
       , lcRands :: [Expr]
+      , lcRet   :: [Type]
       }
     {- ^ Method call -}
   deriving Show
 
 data Expr
   = Atom Atom
-  | CallPrim PrimNode [Expr]
+  | CallPrim PrimNode [Expr] Type
   | Select Atom (Selector Expr)
   deriving Show
 
@@ -152,10 +153,11 @@ instance Pretty Stmt where
                              ]
     UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.hcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
     LetCopyStruct to from _ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "copy" PP.<+> pretty from PP.<> PP.semi
-    LetAllocStruct to ty -> pretty ty PP.<+> pretty to PP.<> PP.semi
+    LetAllocStruct to ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "alloc" PP.<> PP.parens (pretty ty) PP.<> PP.semi
     Let x rhs -> pretty x PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetState x rhs -> pretty "state" PP.<> PP.parens (pretty x) PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
-    LetCall lhs (cls,ann) f args -> PP.vsep [ pretty lhs PP.<+> pretty ":="
+    LetCall lhs (cls,ann) f args _tys ->
+                                    PP.vsep [ pretty lhs PP.<+> pretty ":="
                                             , PP.indent 4 $
                                               (pretty cls PP.<> PP.angles (pretty ann) PP.<> PP.dot PP.<>
                                                pretty f PP.<> pretty args) PP.<> PP.semi
@@ -166,7 +168,7 @@ instance Pretty Stmt where
 instance Pretty Expr where
   pretty expr = case expr of
     Atom a -> pretty a
-    CallPrim pr args -> pretty pr PP.<> pretty args
+    CallPrim pr args _ -> pretty pr PP.<> pretty args
     Select e s -> pretty e PP.<> pretty s
   prettyList exprs = PP.tupled (map pretty exprs)
 

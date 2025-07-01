@@ -60,8 +60,8 @@ codegenM (Program decls) =
   where
     go d = case d of
       DeclareType ty  -> cgTypeDecl ty
-      DeclareConst{}  -> todo d
       DeclareNode cls -> cgClassDecl cls
+      DeclareConst{}  -> todo d
 
     namedTypes =
       (\(a,b) -> NamedTypes a b) $
@@ -203,7 +203,7 @@ cgExpr = go
   where
     go expr = case expr of
       Atom atom         -> cgAtom atom
-      CallPrim pr ls    -> cgPrimApp pr (map cgExpr ls)
+      CallPrim pr ls _  -> cgPrimApp pr (map cgExpr ls)
       Select e s        -> case s of
                              SelectField f -> [C.cexp| $exp:(cgAtom e).$id:f |]
                              _ -> todo s

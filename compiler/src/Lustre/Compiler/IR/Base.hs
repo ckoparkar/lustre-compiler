@@ -4,8 +4,8 @@ module Lustre.Compiler.IR.Base
   , Binder(..), LHS(..), Type(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
+  , allBinders, lhsVar, typeDeclsInPrg
   , FreeVars(..)
-  , allBinders, lhsVar
   , module Language.Lustre.AST
   , module Language.Lustre.Name
   ) where
@@ -16,11 +16,10 @@ import Language.Lustre.AST ( Literal(..), ArraySlice(..)
                            , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
                            )
 import Lustre.Compiler.IR.Lustre.Compat ()
-import Lustre.Compiler.Monad ( Unique, PassM, newUniq )
+import Lustre.Compiler.Monad ( Unique, PassM, MonadGen, newUniq )
 import Data.Text ( Text, pack, unpack )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
-import Data.Map qualified as Map
 import Data.Set qualified as Set
 
 --------------------------------------------------------------------------------
@@ -168,10 +167,10 @@ data Type
   | IntSubrange Integer Integer
     -- ^ An interval subset of the integers.  The 'e's are bounds.
     -- Their values are included in the interval.
-  deriving Show
+  deriving (Show, Eq, Ord)
 
 data Field e = Field { fName :: Text, fValue :: e }
-               deriving Show
+               deriving (Show, Eq, Ord)
 
 instance Functor Field where
   fmap f (Field l e) = Field l (f e)
@@ -184,7 +183,7 @@ data CompName = CompName
   }
   deriving (Show, Eq, Ord)
 
-mkCompName :: Text -> Maybe Name.ModName -> Name.Thing -> PassM CompName
+mkCompName :: MonadGen Unique m => Text -> Maybe Name.ModName -> Name.Thing -> m CompName
 mkCompName txt mo thing =
   do i <- newUniq
      pure (CompName i txt mo thing)
@@ -217,6 +216,14 @@ lhsVar :: LHS e -> CompName
 lhsVar lhs = case lhs of
   LVar x         -> x
   LSelect lhs1 _ -> lhsVar lhs1
+
+typeDeclsInPrg :: BaseProgram a -> [TypeDecl]
+typeDeclsInPrg (Program ls) =
+  foldr (\decl acc -> case decl of
+            DeclareType d -> d : acc
+            _ -> acc)
+        []
+        ls
 
 --------------------------------------------------------------------------------
 -- Free variables

@@ -66,6 +66,7 @@ eqnToTc env (NL.Define lhs rhs) = case (lhs, rhs) of
                                        , Stc.cName  = f
                                        , Stc.cArgs  = args
                                        , Stc.cAnn   = (var (head xs), False)
+                                       , Stc.cRet   = t
                                        }
                             ]
   oth -> error $ "toStc: unexpected, " ++ show oth
