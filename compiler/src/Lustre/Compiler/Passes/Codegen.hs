@@ -169,15 +169,12 @@ cgStmt = go
               [C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgExpr val); |])
             updates
 
-      Let lhs expr ->
-        [[C.cstm| $exp:(cgLHS lhs) = $exp:(cgExpr expr); |]]
-
-      LetState lhs expr ->
-        [[C.cstm| $exp:(cgLHS lhs) = $exp:(cgExpr expr); |]]
-
-      LetCopyStruct to from tyname ->
+      CopyStruct to from tyname ->
         let cgty = [C.cty| struct $id:tyname |]
         in [[C.cstm| memcpy($exp:(cgLHS to), $exp:(cgVar from), sizeof($ty:cgty)); |]]
+
+      Let lhs expr ->
+        [[C.cstm| $exp:(cgLHS lhs) = $exp:(cgExpr expr); |]]
 
       LetAllocStruct _to _tyname -> []
 

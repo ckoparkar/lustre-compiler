@@ -78,8 +78,10 @@ cExprToStmt x cexpr = case cexpr of
     case e of
       Stc.UpdateStruct tyName from updates ->
         Obc.Do
-          (Obc.LetCopyStruct (toObcLHS x) (toVar from) tyName)
-          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates))
+          (Obc.LetAllocStruct (toObcLHS x) tyName)
+          (Obc.Do
+            (Obc.CopyStruct (toObcLHS x) (toVar from) tyName)
+            (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates)))
       Stc.Struct tyName updates ->
         Obc.Do
           (Obc.LetAllocStruct (toObcLHS x) tyName)
@@ -133,8 +135,7 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.Switch cnd ls                 -> Obc.Switch (goExpr cnd) (map (\(c,e) -> (c, go e)) ls)
           Obc.UpdateFields lhs updates      -> Obc.UpdateFields (goLHS lhs) (map goField updates)
           Obc.Let lhs expr                  -> Obc.Let (goLHS lhs) (goExpr expr)
-          Obc.LetState lhs expr             -> Obc.LetState (goLHS lhs) (goExpr expr)
-          Obc.LetCopyStruct lhs from tyname -> Obc.LetCopyStruct (goAddrOf (goLHS lhs)) (Obc.Addr (goVar from)) tyname
+          Obc.CopyStruct lhs from tyname    -> Obc.CopyStruct (goAddrOf (goLHS lhs)) (Obc.Addr (goVar from)) tyname
           Obc.LetAllocStruct lhs tyname     -> Obc.LetAllocStruct (goLHS lhs) tyname
           Obc.LetCall binds cl rator rands t-> Obc.LetCall (map goLHS binds) cl rator (map goExpr rands) t
 
@@ -177,7 +178,7 @@ explicitCopies cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
       Obc.Do s1 s2     -> Obc.Do (go env s1) (go env s2)
       Obc.Let lhs expr -> case expr of
                             Obc.Atom (Obc.Var v) -> case env Map.! (Obc.varCompName v) of
-                              NamedType tyname -> Obc.LetCopyStruct lhs v tyname
+                              NamedType tyname -> Obc.CopyStruct lhs v tyname
                               _ -> stmt
                             _ -> stmt
       _ -> stmt

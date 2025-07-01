@@ -45,18 +45,15 @@ data Stmt
       }
     {-^ Update fields of a struct -}
 
-  | Let (LHS Expr) Expr
-    {-^ Assign local -}
-
-  | LetState (LHS Expr) Expr
-    {-^ Assign state -}
-
-  | LetCopyStruct
+  | CopyStruct
       { lcsTo     :: LHS Expr
       , lcsFrom   :: Var
       , lcsTyName :: CompName
       }
     {-^ Copy struct -}
+
+  | Let (LHS Expr) Expr
+    {-^ Assign local -}
 
   | LetAllocStruct
       { lasTo     :: LHS Expr
@@ -152,10 +149,9 @@ instance Pretty Stmt where
                              , PP.rbrace
                              ]
     UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.hcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
-    LetCopyStruct to from _ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "copy" PP.<+> pretty from PP.<> PP.semi
+    CopyStruct to from _ty -> pretty "copy" PP.<> PP.tupled [pretty to, pretty from] PP.<> PP.semi
     LetAllocStruct to ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "alloc" PP.<> PP.parens (pretty ty) PP.<> PP.semi
     Let x rhs -> pretty x PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
-    LetState x rhs -> pretty "state" PP.<> PP.parens (pretty x) PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
     LetCall lhs (cls,ann) f args _tys ->
                                     PP.vsep [ pretty lhs PP.<+> pretty ":="
                                             , PP.indent 4 $
