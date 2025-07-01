@@ -164,10 +164,8 @@ cgStmt = go
             body = C.Block [ C.BlockStm a | a <- alts1 ] noLoc
         in [[C.cstm| switch ($exp:(cgExpr cnd)) $stm:body |]]
 
-      UpdateFields lhs updates ->
-        map (\(Field lbl val) ->
-              [C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgExpr val); |])
-            updates
+      SetField lhs (Field lbl val) ->
+        [[C.cstm| ($exp:(cgLHS lhs)).$id:lbl = $exp:(cgExpr val); |]]
 
       CopyStruct to from _tyname ->
         [[C.cstm| $exp:(cgLHS to) = $exp:(cgVar from); |]]

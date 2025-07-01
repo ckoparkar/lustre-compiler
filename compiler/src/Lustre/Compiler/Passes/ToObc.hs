@@ -77,15 +77,14 @@ cExprToStmt x cexpr = case cexpr of
   Stc.Expr e ->
     case e of
       Stc.UpdateStruct tyName from updates ->
-        Obc.Do
-          (Obc.LetAllocStruct (toObcLHS x) tyName)
-          (Obc.Do
-            (Obc.CopyStruct (toObcLHS x) (toVar from) tyName)
-            (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates)))
+        Obc.seqStmts $
+          [ Obc.LetAllocStruct (toObcLHS x) tyName
+          , Obc.CopyStruct (toObcLHS x) (toVar from) tyName ] ++
+          map (\field -> Obc.SetField (toObcLHS x) (fmap (toObcExpr) field)) updates
       Stc.Struct tyName updates ->
-        Obc.Do
-          (Obc.LetAllocStruct (toObcLHS x) tyName)
-          (Obc.UpdateFields (toObcLHS x) (map (fmap toObcExpr) updates))
+        Obc.seqStmts $
+          [ Obc.LetAllocStruct (toObcLHS x) tyName ] ++
+          map (\field -> Obc.SetField (toObcLHS x) (fmap (toObcExpr) field)) updates
       _oth ->
         Obc.Let (toObcLHS x) (toObcExpr e)
   Stc.If cnd thn els ->
@@ -133,7 +132,7 @@ classifyVars cls = cls { Obc.clsMethods = map goMthd (Obc.clsMethods cls) }
           Obc.Do s1 s2                      -> Obc.Do (go s1) (go s2)
           Obc.If cnd thn els                -> Obc.If (goExpr cnd) (go thn) (go els)
           Obc.Switch cnd ls                 -> Obc.Switch (goExpr cnd) (map (\(c,e) -> (c, go e)) ls)
-          Obc.UpdateFields lhs updates      -> Obc.UpdateFields (goLHS lhs) (map goField updates)
+          Obc.SetField lhs field            -> Obc.SetField (goLHS lhs) (goField field)
           Obc.Let lhs expr                  -> Obc.Let (goLHS lhs) (goExpr expr)
           Obc.CopyStruct lhs from tyname    -> Obc.CopyStruct (goLHS lhs) (goVar from) tyname
           Obc.LetAllocStruct lhs tyname     -> Obc.LetAllocStruct (goLHS lhs) tyname

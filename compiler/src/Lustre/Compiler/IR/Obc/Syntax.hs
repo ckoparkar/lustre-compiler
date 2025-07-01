@@ -39,11 +39,11 @@ data Stmt
 
   | Switch Expr [(Literal, Stmt)]
 
-  | UpdateFields
-      { ufOf      :: LHS Expr
-      , ufUpdates :: [Field Expr]
+  | SetField
+      { ufOf    :: LHS Expr
+      , ufField :: Field Expr
       }
-    {-^ Update fields of a struct -}
+    {-^ Set a field of a struct -}
 
   | CopyStruct
       { lcsTo     :: LHS Expr
@@ -148,7 +148,8 @@ instance Pretty Stmt where
                                                                     pretty e) ls))
                              , PP.rbrace
                              ]
-    UpdateFields x fs -> pretty x PP.<+> PP.braces (PP.hcat (PP.punctuate PP.semi (map pretty fs))) PP.<> PP.semi
+    SetField x (Field nm e) -> pretty x PP.<> pretty "." PP.<> (pretty nm) PP.<+>
+                               pretty ":=" PP.<+> pretty e PP.<> PP.semi
     CopyStruct to from _ty -> pretty "copy" PP.<> PP.tupled [pretty to, pretty from] PP.<> PP.semi
     LetAllocStruct to ty -> pretty to PP.<+> pretty ":=" PP.<+> pretty "alloc" PP.<> PP.parens (pretty ty) PP.<> PP.semi
     Let x rhs -> pretty x PP.<+> pretty ":=" PP.<+> pretty rhs PP.<> PP.semi
