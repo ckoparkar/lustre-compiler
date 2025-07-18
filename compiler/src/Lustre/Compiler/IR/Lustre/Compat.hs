@@ -181,6 +181,10 @@ instance Pretty e => Pretty (LHS e) where
     LVar x      -> pretty x
     LSelect l s -> pretty l PP.<> pretty s
 
+  prettyList lhss = case lhss of
+    [one] -> pretty one
+    _     -> PP.parens (PP.hsep (map pretty lhss))
+
 instance Pretty e => Pretty (Selector e) where
   pretty sel = case sel of
     SelectField i       -> pretty "." PP.<> pretty i

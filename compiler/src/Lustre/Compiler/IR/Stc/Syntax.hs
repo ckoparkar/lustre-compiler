@@ -1,5 +1,5 @@
 module Lustre.Compiler.IR.Stc.Syntax
-  ( Program, SystemDecl(..), Tc(..)
+  ( Program, SystemDecl(..), Tc(..), NodeInstInfo(..)
   , bindsOfTc
   , module Lustre.Compiler.IR.NLustre.Syntax
   , module Lustre.Compiler.IR.Base
@@ -22,7 +22,7 @@ data SystemDecl = SystemDecl
   , sysBinders   :: NodeBinders CType
   , sysTcs       :: [Tc]
   , sysInits     :: [(CompName, Literal)]
-  , sysInstances :: [(CompName, CompName)]
+  , sysInstances :: [NodeInstInfo]
   }
   deriving Show
 
@@ -33,9 +33,9 @@ data Tc
   | Call                           {-^ Function call -}
       { cBinds :: [LHS Expr]
       , cClk   :: Clock
-      , cName  :: CompName
+      , cFnName:: CompName
       , cArgs  :: [Expr]
-      , cAnn   :: (CompName, Bool)
+      , cInst  :: CompName
       , cRet   :: [CType]
       }
   deriving Show
@@ -52,21 +52,29 @@ instance FreeVars Tc where
     Next _ clk e     -> freeVars clk <> freeVars e
     Call{cClk,cArgs} -> freeVars cClk <> Set.unions (map freeVars cArgs)
 
+-- | Uniquely identify a node instantiation.
+data NodeInstInfo = NodeInstInfo
+  { niNodeName :: CompName
+  , niInstName :: CompName
+  }
+  deriving (Show, Eq, Ord)
+
 --------------------------------------------------------------------------------
 -- Pretty printing
 --------------------------------------------------------------------------------
 
+instance Pretty NodeInstInfo where
+  pretty (NodeInstInfo node inst) = pretty node PP.<> pretty "." PP.<> pretty inst
+
 instance Pretty SystemDecl where
   pretty sys = PP.vsep [ pretty "system" PP.<+> pretty (sysName sys) PP.<+> PP.lbrace
                        , PP.indent 4 $ PP.vsep
-                         [ pretty "system" PP.<+>
-                           PP.vsep (map (\(x,y) -> pretty x PP.<> pretty y) (sysInstances sys)) PP.<>
-                           PP.semi
-                         , pretty "init" PP.<+>
+                         [ PP.vsep (map (\x -> pretty "instance" PP.<+> pretty x PP.<> PP.semi) (sysInstances sys))
+                         , pretty "initialize" PP.<+>
                            PP.align (PP.vsep (map (\(x,c) -> pretty x PP.<+> PP.equals PP.<+> pretty c )
                                                (sysInits sys))) PP.<>
                            PP.semi
-                         , pretty "transition" PP.<+> pretty (sysBinders sys)
+                         , pretty "step" PP.<> pretty (sysBinders sys)
                          , PP.lbrace
                          , PP.indent 4 (pretty (sysTcs sys))
                          , PP.rbrace
@@ -78,17 +86,11 @@ instance Pretty SystemDecl where
 
 instance Pretty Tc where
   pretty tc = case tc of
-    Define lhs clk rhs -> PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
-                                  , PP.indent 4 (pretty rhs)
-                                  ]
-    Next lhs clk e  -> PP.vsep [ pretty "next " PP.<> pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
-                               , PP.indent 4 (pretty e)
-                               ]
+    Define lhs clk rhs -> pretty lhs PP.<+> PP.equals PP.<> PP.brackets (pretty clk) PP.<+> pretty rhs
+    Next lhs clk e  -> pretty "next " PP.<> pretty lhs PP.<+> PP.equals PP.<> PP.brackets (pretty clk) PP.<+> pretty e
     Call lhs clk f args ann _tys ->
-                               PP.vsep [ pretty lhs PP.<+> PP.equals PP.<> PP.parens (pretty clk)
-                                       , PP.indent 4 $
-                                           (pretty f PP.<>
-                                            PP.langle PP.<> pretty ann PP.<> PP.rangle PP.<>
-                                            pretty args)
-                                       ]
+                               pretty lhs PP.<+> PP.equals PP.<> PP.brackets (pretty clk) PP.<+>
+                               (pretty f PP.<>
+                                 PP.langle PP.<> pretty ann PP.<> PP.rangle PP.<>
+                                 pretty args)
   prettyList tcs = PP.vsep $ map pretty tcs

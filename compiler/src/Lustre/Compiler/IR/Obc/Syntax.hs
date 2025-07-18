@@ -1,9 +1,11 @@
 module Lustre.Compiler.IR.Obc.Syntax
   ( Program, ClassDecl(..), Method(..), Stmt(..), Expr(..), Atom(..), Var(..), LHS(..)
+  , NodeInstInfo(..)
   , module Lustre.Compiler.IR.Base
   , seqStmts, varCompName
   ) where
 
+import Lustre.Compiler.IR.Stc.Syntax (NodeInstInfo(..))
 import Lustre.Compiler.IR.Base hiding ( LHS(..) )
 import Prettyprinter qualified as PP
 import Prettyprinter ( Pretty(..) )
@@ -15,7 +17,7 @@ type Program = BaseProgram ClassDecl
 data ClassDecl = ClassDecl
   { clsName      :: CompName
   , clsMemories  :: [Binder Type]
-  , clsInstances :: [(CompName, CompName)]
+  , clsInstances :: [NodeInstInfo]
   , clsMethods   :: [Method]
   }
   deriving Show
@@ -115,13 +117,10 @@ varCompName v = case v of
 instance Pretty ClassDecl where
   pretty cls = PP.vsep [ pretty "class" PP.<+> pretty (clsName cls) PP.<+> PP.lbrace
                        , PP.indent 4 $ PP.vsep
-                         [ PP.vsep (map (\(x,y) -> pretty "instance" PP.<+> pretty x PP.<> PP.colon PP.<>
-                                                   pretty y PP.<> PP.semi)
-                                        (clsInstances cls))
+                         [ PP.vsep (map (\x -> pretty "instance" PP.<+> pretty x PP.<> PP.semi) (clsInstances cls))
                          , PP.vsep (map (\(Binder x ty) -> pretty "memory" PP.<+> pretty x PP.<> PP.colon PP.<>
                                                            pretty ty PP.<> PP.semi)
                                         (clsMemories cls))
-                         , PP.line
                          , prettyList (clsMethods cls)
                          ]
                        , PP.rbrace
@@ -129,7 +128,8 @@ instance Pretty ClassDecl where
   prettyList clss = PP.vsep (PP.punctuate PP.line (map pretty clss))
 
 instance Pretty Method where
-  pretty (Method nm binds body) = PP.vsep [ pretty nm PP.<> pretty binds PP.<+> PP.lbrace
+  pretty (Method nm binds body) = PP.vsep [ pretty nm PP.<> pretty binds
+                                          , PP.lbrace
                                           , PP.indent 4 (pretty body)
                                           , PP.rbrace
                                           ]

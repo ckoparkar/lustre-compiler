@@ -122,7 +122,7 @@ mkClassStruct (ClassDecl name mems insts _fns) =
   do mems1 <- mapM (\(Binder x ty) -> do ty1 <- cgType ty
                                          pure [C.csdecl| $ty:ty1 $id:x; |])
                    mems
-     let fields = mems1 ++ map (\(f,x) -> [C.csdecl| $ty:(structTyPtr f) $id:x; |]) insts
+     let fields = mems1 ++ map (\(NodeInstInfo f x) -> [C.csdecl| $ty:(structTyPtr f) $id:x; |]) insts
      pure [C.cedecl| struct $id:name {$sdecls:fields}; |]
   where
     structTyPtr nm = [C.cty| struct $id:nm *|]

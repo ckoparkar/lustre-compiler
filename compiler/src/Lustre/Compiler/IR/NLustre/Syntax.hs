@@ -86,6 +86,8 @@ data CType = CType { cType :: Type, cClock :: Clock }
   deriving (Show, Eq, Ord)
 
 --------------------------------------------------------------------------------
+-- Helper functions
+--------------------------------------------------------------------------------
 
 nodeEnv :: NodeDecl -> Map.Map CompName CType
 nodeEnv nd =
@@ -184,17 +186,14 @@ bad msg = error ("Unexpected " ++ msg)
 --------------------------------------------------------------------------------
 
 instance Pretty NodeDecl where
-  pretty nd = PP.vsep [ pretty "node" PP.<+> pretty (nodeName nd) PP.<> pretty (nodeBinders nd)
+  pretty nd = PP.vsep [ pretty "node" PP.<+> pretty (nodeName nd) PP.<+> pretty (nodeBinders nd)
                       , pretty "let"
                       , PP.indent 4 (pretty (nodeEqns nd))
                       , pretty "tel"
                       ]
 
 instance Pretty Equation where
-  pretty (Define lhs rhs) =
-    PP.vsep [ pretty lhs PP.<+> PP.equals
-            , PP.indent 4 (pretty rhs)
-            ]
+  pretty (Define lhs rhs) = pretty lhs PP.<+> PP.equals PP.<+> (pretty rhs)
   prettyList eqns = PP.vsep (map pretty eqns)
 
 instance Pretty RHS where

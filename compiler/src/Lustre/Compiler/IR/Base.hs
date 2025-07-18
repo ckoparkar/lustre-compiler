@@ -16,14 +16,17 @@ import Language.Lustre.AST ( Literal(..), ArraySlice(..)
                            , PrimNode(..), Op1(..), Op2(..), OpN(..), Iter(..)
                            )
 import Lustre.Compiler.IR.Lustre.Compat ()
-import Lustre.Compiler.Monad ( Unique, PassM, MonadGen, newUniq )
+import Lustre.Compiler.Monad ( Unique, MonadGen, newUniq )
 import Data.Text ( Text, pack, unpack )
 import Prettyprinter ( Pretty(..) )
 import Prettyprinter qualified as PP
 import Data.Set qualified as Set
 
 --------------------------------------------------------------------------------
+-- AST
+--------------------------------------------------------------------------------
 
+-- | A Lustre program.
 data BaseProgram a = Program [BaseTopDecl a]
   deriving Show
 
@@ -36,6 +39,7 @@ instance Foldable BaseProgram where
 instance Traversable BaseProgram where
   traverse f (Program ls) = Program <$> (traverse (traverse f) ls)
 
+-- | A top-level declaration of a type, constant, or a node.
 data BaseTopDecl a
   = DeclareType  !TypeDecl
   | DeclareConst !ConstDef
@@ -96,10 +100,10 @@ instance Functor Selector where
     SelectElement e -> SelectElement (f e)
     SelectSlice e   -> SelectSlice (fmap f e)
 
--- | Note: only one of the type or definition may be "Nothing".
+-- | A definition of a constant.
 data ConstDef = ConstDef
   { constName     :: CompName
-  , constType     :: Maybe Type   -- ^ Optional type annotation.
+  , constType     :: Maybe Type    -- ^ Optional type annotation.
   , constDef      :: Maybe Literal
     {- ^ Optional definition. If the definition is omitted, then the constant
          is abstract.  In that case, the type cannot be omitted.
@@ -108,6 +112,7 @@ data ConstDef = ConstDef
          constants. -}
   } deriving Show
 
+-- | Variables bound by a node declaration.
 data NodeBinders ty = NodeBinders
   { nodeInputs  :: [Binder ty]
   , nodeOutputs :: [Binder ty]
@@ -132,7 +137,7 @@ data BaseEqnGroup eqn
   | Rec [eqn]     -- ^ A group of recursive equations.
   deriving Show
 
--- | Introduces a local variable.
+-- | Introduces a variable along with its type.
 data Binder ty = Binder
   { binderDefines :: CompName
   , binderType    :: ty
@@ -142,6 +147,7 @@ data Binder ty = Binder
 instance Functor Binder where
   fmap f (Binder x ty) = Binder x (f ty)
 
+-- | The left hand side of an assignment expression.
 data LHS e
   = LVar CompName
   | LSelect (LHS e) (Selector e)
@@ -169,12 +175,18 @@ data Type
     -- Their values are included in the interval.
   deriving (Show, Eq, Ord)
 
+-- | A struct field's label and value.
 data Field e = Field { fName :: Text, fValue :: e }
                deriving (Show, Eq, Ord)
 
 instance Functor Field where
   fmap f (Field l e) = Field l (f e)
 
+--------------------------------------------------------------------------------
+-- Names
+--------------------------------------------------------------------------------
+
+-- | A unique, unambiguous name for something.
 data CompName = CompName
   { cUniq   :: Unique
   , cText   :: Text
@@ -208,6 +220,8 @@ compNameFromOrigName (Name.OrigName uniq mo unqual thing) =
   CompName (fromIntegral uniq) (Name.identText unqual) mo thing
 
 --------------------------------------------------------------------------------
+-- Helper functions
+--------------------------------------------------------------------------------
 
 allBinders :: NodeBinders ty -> [Binder ty]
 allBinders (NodeBinders ins outs locals) = ins ++ outs ++ locals
@@ -229,6 +243,7 @@ typeDeclsInPrg (Program ls) =
 -- Free variables
 --------------------------------------------------------------------------------
 
+-- | Free variables of expressions and binding groups.
 class FreeVars a where
   freeVars :: a -> Set.Set CompName
 
@@ -304,19 +319,22 @@ instance Pretty e => Pretty (Selector e) where
 
 instance Pretty a => Pretty (NodeBinders a) where
   pretty (NodeBinders ins outs locals) =
-    PP.vsep [ prettyList ins
-            , pretty "returns" PP.<+> prettyList outs PP.<> PP.semi
-            , pretty "var " PP.<> PP.hsep (PP.punctuate PP.comma (map pretty locals)) PP.<> PP.semi
+    PP.vsep [ prettyList ins PP.<+> pretty "returns" PP.<+> prettyList outs
+            , PP.indent 2 (pretty "local" PP.<+> PP.hsep (PP.punctuate PP.comma (map pretty locals)) PP.<> PP.semi)
             ]
 
 instance Pretty ty => Pretty (Binder ty) where
-  pretty (Binder x ty) = pretty x PP.<> pretty ":" PP.<> pretty ty
-  prettyList binds   = PP.tupled (map pretty binds)
+  pretty (Binder x ty) = pretty x PP.<+> pretty ":" PP.<+> pretty ty
+  prettyList binds = PP.tupled (map pretty binds)
 
 instance Pretty e => Pretty (LHS e) where
   pretty lhs = case lhs of
     LVar x      -> pretty x
     LSelect l s -> pretty l <> pretty s
+
+  prettyList lhss = case lhss of
+    [one] -> pretty one
+    _     -> PP.parens (PP.hsep (map pretty lhss))
 
 instance Pretty Type where
   pretty ty = case ty of

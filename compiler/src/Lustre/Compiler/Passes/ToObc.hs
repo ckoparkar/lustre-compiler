@@ -43,7 +43,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
       , Obc.mBinders = mempty
       , Obc.mBody    = Obc.seqStmts $
                          map (\(x,c) -> Obc.Let (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
-                         map (\(cls,i) -> Obc.LetCall [] (cls,i) fnReset [] []) insts
+                         map (\(Stc.NodeInstInfo cls i) -> Obc.LetCall [] (cls,i) fnReset [] []) insts
       }
 
 fnReset, fnStep :: CompName
@@ -56,9 +56,9 @@ tcToStmt tc = case tc of
     ctrl clk (cExprToStmt x cexpr)
   Stc.Next x clk expr ->
     ctrl clk (cExprToStmt x (Stc.Expr expr))
-  Stc.Call binds clk name args (ann,_) tys ->
+  Stc.Call binds clk name args inst tys ->
     ctrl clk (Obc.LetCall (map toObcLHS binds)
-                          (name, ann)
+                          (name, inst)
                           fnStep
                           (map toObcExpr args)
                           (map Stc.cType tys))

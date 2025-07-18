@@ -53,8 +53,8 @@ nodeToSystem nd@(NL.NodeDecl name binders eqns) =
 
     toInst tc =
       case tc of
-        Stc.Call{Stc.cName,Stc.cAnn} -> [(cName, fst cAnn)]
-        _                            -> []
+        Stc.Call{Stc.cFnName,Stc.cInst} -> [(Stc.NodeInstInfo cFnName cInst)]
+        _                               -> []
 
 
 eqnToTc :: Map.Map NL.CompName NL.CType -> NL.Equation -> [Stc.Tc]
@@ -63,17 +63,14 @@ eqnToTc env (NL.Define lhs rhs) = case (lhs, rhs) of
   ([x], NL.Fby2 _ expr)  -> [ Stc.Next x (clockOf x) expr ]
   (xs, NL.Call f args t) -> [ Stc.Call { Stc.cBinds = xs
                                        , Stc.cClk   = (Stc.cClock (head t))
-                                       , Stc.cName  = f
+                                       , Stc.cFnName= f
                                        , Stc.cArgs  = args
-                                       , Stc.cAnn   = (var (head xs), False)
+                                       , Stc.cInst  = NL.lhsVar (head xs)
                                        , Stc.cRet   = t
                                        }
                             ]
   oth -> error $ "toStc: unexpected, " ++ show oth
   where
-    var (NL.LVar x) = x
-    var oth         = todo oth
-
     clockOf e = case e of
       NL.LVar x      -> NL.cClock (env Map.! x)
       NL.LSelect x _ -> clockOf x
