@@ -17,6 +17,7 @@ library
     exposed-modules:  Lustre.Compiler
                       Lustre.Compiler.IR.NLustre
                       Lustre.Compiler.IR.Stc
+                      Lustre.Compiler.IR.Scf
                       Lustre.Compiler.IR.Obc
     other-modules:    Lustre.Utils
                       Lustre.Compiler.Options
@@ -25,11 +26,13 @@ library
                       Lustre.Compiler.IR.Base
                       Lustre.Compiler.IR.NLustre.Syntax
                       Lustre.Compiler.IR.Stc.Syntax
+                      Lustre.Compiler.IR.Scf.Syntax
                       Lustre.Compiler.IR.Obc.Syntax
                       Lustre.Compiler.Passes.Normalize
                       Lustre.Compiler.Passes.Simplify
                       Lustre.Compiler.Passes.ToStc
                       Lustre.Compiler.Passes.Schedule
+                      Lustre.Compiler.Passes.ToScf
                       Lustre.Compiler.Passes.ToObc
                       Lustre.Compiler.Passes.Codegen
     build-depends:    language-lustre

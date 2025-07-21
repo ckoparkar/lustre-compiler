@@ -30,7 +30,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
        Real{} -> RealType
        Bool{} -> BoolType
 
-    mems    = map (\(x,c) -> Binder x (typeOfLit c)) inits
+    mems    = map (\(x,c,_) -> Binder x (typeOfLit c)) inits
 
     step = Obc.Method
       { Obc.mName    = fnStep
@@ -42,7 +42,7 @@ systemToClass (Stc.SystemDecl name binders tcs inits insts) =
       { Obc.mName    = fnReset
       , Obc.mBinders = mempty
       , Obc.mBody    = Obc.seqStmts $
-                         map (\(x,c) -> Obc.Let (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
+                         map (\(x,c,_) -> Obc.Let (Obc.LVar (Obc.Oth x)) (Obc.Atom (Obc.Lit c))) inits ++
                          map (\(Stc.NodeInstInfo cls i) -> Obc.LetCall [] (cls,i) fnReset [] []) insts
       }
 

@@ -21,7 +21,7 @@ data SystemDecl = SystemDecl
   { sysName      :: CompName
   , sysBinders   :: NodeBinders CType
   , sysTcs       :: [Tc]
-  , sysInits     :: [(CompName, Literal)]
+  , sysInits     :: [(CompName, Literal, Type)]
   , sysInstances :: [NodeInstInfo]
   }
   deriving Show
@@ -71,7 +71,8 @@ instance Pretty SystemDecl where
                        , PP.indent 4 $ PP.vsep
                          [ PP.vsep (map (\x -> pretty "instance" PP.<+> pretty x PP.<> PP.semi) (sysInstances sys))
                          , pretty "initialize" PP.<+>
-                           PP.align (PP.vsep (map (\(x,c) -> pretty x PP.<+> PP.equals PP.<+> pretty c )
+                           PP.align (PP.vsep (map (\(x,c,ty) -> pretty x PP.<+> PP.equals PP.<+> pretty c PP.<+>
+                                                                PP.colon PP.<+> pretty ty)
                                                (sysInits sys))) PP.<>
                            PP.semi
                          , pretty "step" PP.<> pretty (sysBinders sys)

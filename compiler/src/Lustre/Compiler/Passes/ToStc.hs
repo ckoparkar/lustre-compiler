@@ -31,10 +31,13 @@ nodeToSystem nd@(NL.NodeDecl name binders eqns) =
     inits =
       map (\x -> case Map.lookup x initValues of
                    Nothing -> case Stc.cType ((NL.nodeEnv nd) Map.! x) of
-                                Stc.IntType  -> (x, Stc.Int 0)
-                                Stc.RealType -> (x, Stc.Real 0.0)
+                                Stc.IntType  -> (x, Stc.Int 0, Stc.IntType)
+                                Stc.RealType -> (x, Stc.Real 0.0, Stc.RealType)
                                 ty -> todo ty
-                   Just c  -> (x,c))
+                   Just c  -> case c of
+                                Stc.Int{} -> (x,c,Stc.IntType)
+                                Stc.Real{} -> (x,c,Stc.RealType)
+                                Stc.Bool{} -> (x,c,Stc.BoolType))
           (nub initVars)
 
     initVars =
