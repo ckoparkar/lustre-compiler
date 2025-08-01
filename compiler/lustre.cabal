@@ -36,7 +36,7 @@ library
                     , text
                     , containers
                     , mtl
-                    , monad-gen
+                    , monad-gen >= 0.3.0.2
                     , directory
                     , filepath
                     , prettyprinter
