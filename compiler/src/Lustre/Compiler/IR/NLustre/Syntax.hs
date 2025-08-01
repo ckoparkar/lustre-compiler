@@ -210,13 +210,7 @@ instance Pretty CExpr where
       where
         ppBranch (lit, body) =
           pretty (Lit lit ty) PP.<+> pretty "=>" PP.<+> pretty body
-    If cnd thn els  -> PP.vsep $
-                         [ pretty "if" PP.<+> PP.parens (pretty cnd) PP.<+> PP.lbrace
-                         , PP.indent 4 (pretty thn)
-                         , PP.rbrace PP.<+> pretty "else" PP.<+> PP.lbrace
-                         , PP.indent 4 (pretty els)
-                         , PP.rbrace
-                         ]
+    If cnd thn els  -> PP.vsep [ pretty "if" PP.<+> pretty cnd, pretty thn, pretty els ]
 
 instance Pretty Expr where
   pretty expr = case expr of
@@ -226,9 +220,9 @@ instance Pretty Expr where
     Tuple es      -> PP.parens (PP.hsep (PP.punctuate PP.comma (map pretty es)))
     Array es      -> PP.brackets (PP.hsep (PP.punctuate PP.comma (map pretty es)))
     Struct s fs   -> pretty s PP.<+> PP.braces (PP.align (PP.vcat (PP.punctuate PP.semi (map pretty fs))))
-    UpdateStruct _s x fs ->
-      pretty x PP.<+> pretty "with" PP.<+>
-      PP.braces (PP.align (PP.vcat (PP.punctuate PP.semi (map pretty fs))))
+    UpdateStruct s x fs ->
+      pretty s PP.<+> PP.braces (pretty x PP.<+> pretty "with" PP.<+>
+                                 PP.align (PP.vcat (PP.punctuate PP.semi (map pretty fs))))
     When e b    -> pretty e PP.<+> pretty "when" PP.<+> pretty b
   prettyList exprs = PP.tupled (map pretty exprs)
 

@@ -1,7 +1,7 @@
 module Lustre.Compiler.IR.Base
   ( BaseProgram(..), BaseTopDecl(..), BaseEqnGroup(..)
   , TypeDecl(..), TypeDef(..), FieldType(..), Selector(..), ConstDef(..), NodeBinders(..)
-  , Binder(..), LHS(..), Type(..), Field(..), BaseBlock(..)
+  , Binder(..), LHS(..), Type(..), Field(..)
   , CompName, mkCompName, mkCompName', compNameToString, compNameToText
   , compNameFromIdent, compNameFromName, compNameFromOrigName
   , allBinders, lhsVar, typeDeclsInPrg
@@ -100,23 +100,6 @@ instance Functor Selector where
     SelectElement e -> SelectElement (f e)
     SelectSlice e   -> SelectSlice (fmap f e)
 
-instance Foldable Selector where
-  foldr f b sel = case sel of
-    SelectField{} -> b
-    SelectElement e -> f e b
-    SelectSlice (ArraySlice x y mb_z) ->
-      foldr f b ([x,y] ++ (case mb_z of
-                             Nothing -> []
-                             Just z  -> [z]))
-
-instance Traversable Selector where
-  traverse f sel = case sel of
-    SelectField x -> pure (SelectField x)
-    SelectElement e -> SelectElement <$> f e
-    SelectSlice (ArraySlice x y mb_z) ->
-      SelectSlice <$> (ArraySlice <$> f x <*> f y <*> traverse f mb_z)
-
-
 -- | A definition of a constant.
 data ConstDef = ConstDef
   { constName     :: CompName
@@ -198,15 +181,6 @@ data Field e = Field { fName :: Text, fValue :: e }
 
 instance Functor Field where
   fmap f (Field l e) = Field l (f e)
-
--- | A Block represents an ordered list of statements.
-data BaseBlock stmt ty = Block
-  { blkName       :: CompName
-  , blkInputs     :: [Binder ty]
-  , blkStmts      :: [stmt]
-  , blkTerminator :: Maybe stmt
-  }
-  deriving Show
 
 --------------------------------------------------------------------------------
 -- Names
@@ -331,7 +305,7 @@ instance Pretty TypeDef where
       IsStruct fs -> PP.braces (PP.hcat (PP.punctuate (PP.semi PP.<> PP.space) (map pretty fs)))
 
 instance Pretty FieldType where
-  pretty ft = pretty (fieldName ft) PP.<+> PP.colon PP.<+> pretty (fieldType ft) PP.<> optVal
+  pretty ft = pretty (fieldName ft) PP.<+> pretty (fieldType ft) PP.<> optVal
     where optVal = case fieldDefault ft of
                      Nothing -> mempty
                      Just e  -> PP.space PP.<> pretty "=" PP.<+> pretty e
@@ -373,20 +347,8 @@ instance Pretty Type where
       pretty "subrange" PP.<+> PP.brackets (PP.hsep (PP.punctuate PP.comma (map pretty [e1,e2]))) PP.<+>
       pretty "of" PP.<+> pretty "int"
 
-  prettyList tys = PP.tupled (map pretty tys)
-
 instance Pretty e => Pretty (Field e) where
   pretty (Field x e) = pretty x PP.<+> pretty "=" PP.<+> pretty e
-
-instance (Pretty stmt, Pretty ty) => Pretty (BaseBlock stmt ty) where
-  pretty (Block nm ins stmts term) =
-    let stmts1 = case term of
-                   Nothing -> stmts
-                   Just t  -> stmts ++ [t]
-    in PP.vsep [ pretty "^" PP.<> pretty nm PP.<+> pretty ins PP.<> PP.colon PP.<+> PP.lbrace
-               , PP.indent 4 (pretty stmts1)
-               , PP.rbrace
-               ]
 
 instance Pretty CompName where
   pretty (CompName uniq txt mbmo _thing) =

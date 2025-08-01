@@ -20,7 +20,6 @@ import Lustre.Compiler.Passes.Normalize ( normalizeM )
 import Lustre.Compiler.Passes.Simplify  ( simplifyM )
 import Lustre.Compiler.Passes.ToStc     ( toStcM     )
 import Lustre.Compiler.Passes.Schedule  ( scheduleM  )
-import Lustre.Compiler.Passes.ToScf     ( toScfM     )
 import Lustre.Compiler.Passes.ToObc     ( toObcM     )
 import Lustre.Compiler.Passes.Codegen   ( codegenM, CParts(..) )
 
@@ -62,7 +61,6 @@ passes _config p0 =
      p3    <- pass Simplify        simplifyM     p2
      p4    <- pass ToStc           toStcM        p3
      p5    <- pass Scheduling      scheduleM     p4
-     p5'   <- pass ToScf           toScfM        p5
      p6    <- pass ToObc           toObcM        p5
      p7    <- pass Codegen         codegenM      p6
      pure p7
@@ -89,7 +87,6 @@ data Pass
   | Simplify
   | ToStc
   | Scheduling
-  | ToScf
   | ToObc
   | Codegen
   deriving (Eq, Show)
