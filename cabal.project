@@ -2,4 +2,4 @@ packages: ast compiler
 
 source-repository-package
    type:     git
-   location: https://git.sr.ht/~ckoparkar/monad-gen
+   location: https://github.com/ckoparkar/monad-gen.git
